@@ -13,6 +13,8 @@ type WebviewEl = HTMLElement & {
   executeJavaScript(code: string): Promise<unknown>
   insertCSS(css: string): Promise<string>
   removeInsertedCSS(key: string): Promise<void>
+  findInPage(text: string, options?: { forward?: boolean; matchCase?: boolean }): number
+  stopFindInPage(action: 'clearSelection' | 'keepSelection' | 'activateSelection'): void
   addEventListener(e: string, cb: (ev: unknown) => void): void
   removeEventListener(e: string, cb: (ev: unknown) => void): void
 }
@@ -50,6 +52,15 @@ export function WebTab({ tab }: { tab: Tab }): JSX.Element {
   const ref = useRef<HTMLElement & { reload(): void; goBack(): void; goForward(): void; src: string } | null>(null)
   const updateTab = useStore((s) => s.updateTab)
   const recordVisit = useStore((s) => s.recordVisit)
+  const openTab = useStore((s) => s.openTab)
+
+  // src is set once on mount: rebinding it on every navigation state sync
+  // would make Chromium reload the page it just loaded.
+  useEffect(() => {
+    const el = ref.current as unknown as WebviewEl | null
+    if (el && !el.hasAttribute('src')) el.setAttribute('src', tab.target)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   useEffect(() => {
     const el = ref.current as unknown as WebviewEl | null
@@ -75,14 +86,28 @@ export function WebTab({ tab }: { tab: Tab }): JSX.Element {
       }
       recordVisit(url, host)
     }
+    // outbound links (target=_blank etc.) open as new tabs instead of dying
+    const onNewWindow = (e: unknown): void => {
+      const ev = e as { url?: string; preventDefault?: () => void }
+      try {
+        ev.preventDefault?.()
+      } catch {
+        // older electron — handler return is enough
+      }
+      if (ev.url && ev.url.startsWith('http')) openTab('web', ev.url)
+    }
     el.addEventListener('page-title-updated', onTitle)
     el.addEventListener('did-navigate', onNav)
+    el.addEventListener('did-navigate-in-page', onNav)
+    el.addEventListener('new-window', onNewWindow)
     return () => {
       el.removeEventListener('page-title-updated', onTitle)
       el.removeEventListener('did-navigate', onNav)
+      el.removeEventListener('did-navigate-in-page', onNav)
+      el.removeEventListener('new-window', onNewWindow)
       unregisterWebview(tab.id)
     }
-  }, [tab.id, updateTab, recordVisit])
+  }, [tab.id, updateTab, recordVisit, openTab])
 
   // Themed scrollbars inside the guest page (insertCSS bypasses page CSP).
   // Re-applied on theme/mode change with the previous key removed.
@@ -147,8 +172,8 @@ export function WebTab({ tab }: { tab: Tab }): JSX.Element {
   return (
     <webview
       ref={ref}
-      src={tab.target}
       partition="persist:unibrowser"
+      allowpopups=""
       style={{ width: '100%', height: '100%', border: 'none' }}
     />
   )

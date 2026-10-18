@@ -2,9 +2,13 @@ import { useEffect, useState } from 'react'
 import CodeMirror from '@uiw/react-codemirror'
 import { createTheme } from '@uiw/codemirror-themes'
 import { markdown } from '@codemirror/lang-markdown'
+import { keymap } from '@codemirror/view'
+import { searchKeymap } from '@codemirror/search'
+import { vim } from '@replit/codemirror-vim'
 import { tags as t } from '@lezer/highlight'
 import { marked } from 'marked'
 import { useStore } from '../store'
+import { registerEditor, unregisterEditor } from '../webviews'
 import { Tab } from '../tabs'
 
 /**
@@ -40,7 +44,12 @@ const ubTheme = createTheme({
 
 export function MarkdownTab({ tab }: { tab: Tab }): JSX.Element {
   const [text, setText] = useState('# loading…')
-  const [status, setStatus] = useState('')
+  // Preview lags typing by 300ms: the editor stays instant while the
+  // expensive full re-parse + DOM swap happens off the keystroke path.
+  const [preview, setPreview] = useState('# loading…')
+  const [view, setView] = useState<'edit' | 'split' | 'preview'>('split')
+  const vimMode = useStore((s) => s.vimMode)
+  const setVimMode = useStore((s) => s.setVimMode)
 
   useEffect(() => {
     let alive = true
@@ -59,36 +68,100 @@ export function MarkdownTab({ tab }: { tab: Tab }): JSX.Element {
   }, [tab.target])
 
   useEffect(() => {
+    const t = setTimeout(() => setPreview(text), 300)
+    return () => clearTimeout(t)
+  }, [text])
+
+  useEffect(() => {
     const t = setTimeout(() => {
-      window.vault.write(tab.target, text).then(() => {
-        setStatus(`saved ${new Date().toLocaleTimeString()}`)
+      window.vault.write(tab.target, text).catch(() => {
+        // save failed — next keystroke retries
       })
     }, 600)
     return () => clearTimeout(t)
   }, [text, tab.target])
 
+  useEffect(() => () => unregisterEditor(tab.id), [tab.id])
+
   return (
-    <div style={{ display: 'flex', height: '100%' }}>
-      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0, borderRight: '1px solid var(--border)' }}>
-        <div style={{ fontSize: 11, color: 'var(--text-dim)', padding: '6px 10px', flex: 'none' }}>
-          {tab.target} · {status}
-        </div>
-        <div style={{ flex: 1, minHeight: 0, overflow: 'hidden', fontSize: 14 }}>
-          <CodeMirror
-            value={text}
-            height="100%"
-            theme={ubTheme}
-            extensions={[markdown()]}
-            basicSetup={{ lineNumbers: false, foldGutter: false }}
-            onChange={(v) => setText(v)}
-          />
-        </div>
-      </div>
+    <div style={{ display: 'flex', height: '100%', flexDirection: 'column' }}>
       <div
-        className="md-preview"
-        style={{ flex: 1, overflow: 'auto', padding: 20, background: 'var(--bg-soft)', color: 'var(--text)' }}
-        dangerouslySetInnerHTML={{ __html: marked.parse(text) as string }}
-      />
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          fontSize: 11,
+          color: 'var(--text-dim)',
+          padding: '6px 10px',
+          flex: 'none',
+          borderBottom: '1px solid var(--border)'
+        }}
+      >
+        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{tab.target}</span>
+        <span style={{ marginLeft: 'auto', display: 'flex', gap: 2, flex: 'none' }}>
+          {(['edit', 'split', 'preview'] as const).map((v) => (
+            <button
+              key={v}
+              className={`btn${view === v ? ' on' : ''}`}
+              style={{ padding: '2px 8px', fontSize: 11 }}
+              title={v === 'edit' ? 'Editor only' : v === 'split' ? 'Editor + preview' : 'Preview only'}
+              onClick={() => setView(v)}
+            >
+              {v === 'edit' ? 'Edit' : v === 'split' ? 'Split' : 'View'}
+            </button>
+          ))}
+          <button
+            className={`btn${vimMode ? ' on' : ''}`}
+            style={{ padding: '2px 8px', fontSize: 11 }}
+            title="Vim modal editing for notes"
+            onClick={() => setVimMode(!vimMode)}
+          >
+            Vim
+          </button>
+        </span>
+      </div>
+      <div style={{ display: 'flex', flex: 1, minHeight: 0 }}>
+        {view !== 'preview' && (
+          <div
+            className="md-cm"
+            style={{
+              flex: 1,
+              minHeight: 0,
+              minWidth: 0,
+              overflow: 'hidden',
+              fontSize: 14,
+              borderRight: view === 'split' ? '1px solid var(--border)' : 'none'
+            }}
+          >
+            <CodeMirror
+              value={text}
+              height="100%"
+              theme={ubTheme}
+              extensions={[markdown(), keymap.of(searchKeymap), ...(vimMode ? [vim()] : [])]}
+              basicSetup={{ lineNumbers: false, foldGutter: false }}
+              onChange={(v) => setText(v)}
+              onCreateEditor={(v) => registerEditor(tab.id, v)}
+            />
+          </div>
+        )}
+        {view !== 'edit' && (
+          <div
+            className="md-preview"
+            style={{
+              flex: 1,
+              minWidth: 0,
+              overflow: 'auto',
+              padding: 20,
+              background: 'var(--bg-soft)',
+              color: 'var(--text)',
+              // full-width reading column in View mode, constrained in Split
+              maxWidth: view === 'preview' ? 980 : undefined,
+              margin: view === 'preview' ? '0 auto' : undefined,
+              width: '100%'
+            }}
+            dangerouslySetInnerHTML={{ __html: marked.parse(preview) as string }}
+          />
+        )}
+      </div>
     </div>
   )
 }

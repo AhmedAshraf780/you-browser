@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useStore } from '../store'
-import { typeForPath } from '../tabs'
+import { typeForPath, type TabType } from '../tabs'
 import { baseName, recentVaultFiles } from '../vault'
 
 /* ═══════════════════════════════════════════════════════════════════
@@ -81,7 +81,10 @@ function PomodoroTimer({ onSessionDone }: { onSessionDone: (mins: number) => voi
   const [running,   setRunning]   = useState(false)
   const [seconds,   setSeconds]   = useState(POMO_PRESETS[0].work * 60)
   const [completed, setCompleted] = useState(() => loadJ<number>('ub.pomo.done', 0))
-  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const endRef = useRef(0)
+  const secsRef = useRef(seconds)
+  secsRef.current = seconds
+  const firedRef = useRef(false)
 
   const preset_  = POMO_PRESETS[preset]
   const totalSec = phase === 'work' ? preset_.work * 60 : preset_.rest * 60
@@ -92,31 +95,51 @@ function PomodoroTimer({ onSessionDone }: { onSessionDone: (mins: number) => voi
   const CIRC = 2 * Math.PI * R
   const dash = CIRC * (1 - progress)
 
+  // Wall-clock ticker: the displayed time derives from an end timestamp,
+  // so parent re-renders (the home clock ticks every second) can never
+  // reset or stall the countdown. Single stable effect on `running` only.
   useEffect(() => {
-    if (!running) { if (intervalRef.current) clearInterval(intervalRef.current); return }
-    intervalRef.current = setInterval(() => {
-      setSeconds((s) => {
-        if (s <= 1) {
-          clearInterval(intervalRef.current!)
-          if (phase === 'work') {
-            const done = completed + 1
-            setCompleted(done)
-            saveJ('ub.pomo.done', done)
-            onSessionDone(preset_.work)
-          }
-          setPhase((p) => (p === 'work' ? 'rest' : 'work'))
-          setRunning(false)
-          setSeconds(phase === 'work' ? preset_.rest * 60 : preset_.work * 60)
-          return 0
-        }
-        return s - 1
+    if (!running) return
+    const id = setInterval(() => {
+      setSeconds(Math.max(0, Math.round((endRef.current - Date.now()) / 1000)))
+    }, 250)
+    return () => clearInterval(id)
+  }, [running])
+
+  // Completion watcher — the firedRef guard makes it exactly-once even
+  // under StrictMode double-effects and per-second parent re-renders.
+  useEffect(() => {
+    if (!running || seconds > 0 || firedRef.current) return
+    firedRef.current = true
+    setRunning(false)
+    if (phase === 'work') {
+      const workMins = POMO_PRESETS[preset].work
+      setCompleted((c) => {
+        const done = c + 1
+        try { saveJ('ub.pomo.done', done) } catch { /* private mode */ }
+        return done
       })
-    }, 1000)
-    return () => { if (intervalRef.current) clearInterval(intervalRef.current) }
-  }, [running, phase, preset_, completed, onSessionDone])
+      onSessionDone(workMins)
+      setPhase('rest')
+      setSeconds(POMO_PRESETS[preset].rest * 60)
+    } else {
+      setPhase('work')
+      setSeconds(POMO_PRESETS[preset].work * 60)
+    }
+  }, [running, seconds, phase, preset, onSessionDone])
+
+  const toggle = (): void => {
+    if (!running) {
+      // (re)arm the end timestamp from the currently displayed remainder
+      endRef.current = Date.now() + secsRef.current * 1000
+      firedRef.current = secsRef.current <= 0
+    }
+    setRunning((r) => !r)
+  }
 
   const reset = (): void => {
     setRunning(false)
+    firedRef.current = false
     setPhase('work')
     setSeconds(preset_.work * 60)
   }
@@ -124,6 +147,7 @@ function PomodoroTimer({ onSessionDone }: { onSessionDone: (mins: number) => voi
   const switchPreset = (i: number): void => {
     setPreset(i)
     setRunning(false)
+    firedRef.current = false
     setPhase('work')
     setSeconds(POMO_PRESETS[i].work * 60)
   }
@@ -170,7 +194,7 @@ function PomodoroTimer({ onSessionDone }: { onSessionDone: (mins: number) => voi
         <button className="pomo-btn pomo-reset" onClick={reset} title="Reset">↺</button>
         <button
           className={`pomo-btn pomo-start${running ? ' running' : ''}`}
-          onClick={() => setRunning((r) => !r)}
+          onClick={toggle}
         >
           {running ? '⏸ Pause' : '▶ Start'}
         </button>
@@ -448,6 +472,170 @@ function DailyStats({ sessions, habits }: { sessions: FocusSession[]; habits?: n
   )
 }
 
+/* ─── Weekly Plan ─────────────────────────────────────────────────── */
+interface PlanItem {
+  id: string
+  text: string
+  done: boolean
+}
+
+function weekDates(offset: number): Date[] {
+  const now = new Date()
+  const monday = new Date(now)
+  monday.setDate(now.getDate() - ((now.getDay() + 6) % 7) + offset * 7)
+  return Array.from({ length: 7 }, (_, i) => {
+    const d = new Date(monday)
+    d.setDate(monday.getDate() + i)
+    return d
+  })
+}
+
+function planKey(d: Date): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
+
+function WeeklyPlan(): JSX.Element {
+  const [offset, setOffset] = useState(0)
+  const [plans, setPlans] = useState<Record<string, PlanItem[]>>(() => loadJ('ub.weekplan', {}))
+  const [addingTo, setAddingTo] = useState<string | null>(null)
+  const [draft, setDraft] = useState('')
+
+  const days = useMemo(() => weekDates(offset), [offset])
+  const todayK = planKey(new Date())
+  const rangeLabel = `${days[0].toLocaleDateString(undefined, { month: 'short', day: 'numeric' })} – ${days[6].toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}`
+
+  const save = (next: Record<string, PlanItem[]>): void => {
+    setPlans(next)
+    saveJ('ub.weekplan', next)
+  }
+
+  const commit = (key: string): void => {
+    const text = draft.trim().slice(0, 200)
+    setAddingTo(null)
+    setDraft('')
+    if (!text) return
+    save({ ...plans, [key]: [...(plans[key] ?? []), { id: `${Date.now()}-${Math.random().toString(36).slice(2, 6)}`, text, done: false }] })
+  }
+
+  const toggle = (key: string, id: string): void => {
+    save({ ...plans, [key]: (plans[key] ?? []).map((p) => (p.id === id ? { ...p, done: !p.done } : p)) })
+  }
+
+  const remove = (key: string, id: string): void => {
+    const next = (plans[key] ?? []).filter((p) => p.id !== id)
+    const all = { ...plans }
+    if (next.length === 0) delete all[key]
+    else all[key] = next
+    save(all)
+  }
+
+  return (
+    <div>
+      <div className="week-head">
+        <button className="btn" onClick={() => setOffset((o) => o - 1)} title="Previous week">‹</button>
+        <span className="week-title">{rangeLabel}</span>
+        <button className="btn" onClick={() => setOffset(0)} title="This week">Today</button>
+        <button className="btn" onClick={() => setOffset((o) => o + 1)} title="Next week">›</button>
+      </div>
+      <div className="week-grid">
+        {days.map((d) => {
+          const k = planKey(d)
+          const items = plans[k] ?? []
+          const isToday = k === todayK
+          return (
+            <div key={k} className={`week-day${isToday ? ' today' : ''}`}>
+              <div className="week-dow">
+                {d.toLocaleDateString(undefined, { weekday: 'short' })}
+                <span className="week-num">{d.getDate()}</span>
+              </div>
+              <div className="week-items">
+                {items.map((p) => (
+                  <div key={p.id} className={`week-item${p.done ? ' done' : ''}`}>
+                    <input type="checkbox" checked={p.done} onChange={() => toggle(k, p.id)} />
+                    <span className="t" onClick={() => toggle(k, p.id)}>{p.text}</span>
+                    <button className="rm" onClick={() => remove(k, p.id)}>×</button>
+                  </div>
+                ))}
+                {addingTo === k ? (
+                  <input
+                    className="week-input"
+                    autoFocus
+                    value={draft}
+                    placeholder="Add…"
+                    onChange={(e) => setDraft(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') commit(k)
+                      if (e.key === 'Escape') { setAddingTo(null); setDraft('') }
+                    }}
+                    onBlur={() => commit(k)}
+                  />
+                ) : (
+                  <button className="week-add" onClick={() => { setAddingTo(k); setDraft('') }}>+ Add</button>
+                )}
+              </div>
+            </div>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
+/* ─── English (vocabulary) ────────────────────────────────────────── */
+function EnglishCard({ openTab }: { openTab: (type: TabType, target: string) => void }): JSX.Element {
+  const vocab = useStore((s) => s.vocab)
+  const study = useStore((s) => s.study)
+  const [nowMs, setNowMs] = useState(() => Date.now())
+  useEffect(() => {
+    const t = setInterval(() => setNowMs(Date.now()), 30_000)
+    return () => clearInterval(t)
+  }, [])
+
+  const due = vocab.filter((c) => c.srs.due <= nowMs).length
+  const learned = vocab.filter((c) => c.srs.reps > 0).length
+
+  return (
+    <div className="eng">
+      <div className="eng-nums">
+        <div className="eng-stat">
+          <span className={`eng-big${due > 0 ? ' hot' : ''}`}>{due}</span>
+          <span className="eng-cap">due now</span>
+        </div>
+        <div className="eng-stat">
+          <span className="eng-big">{vocab.length}</span>
+          <span className="eng-cap">words</span>
+        </div>
+        <div className="eng-stat">
+          <span className="eng-big">{learned}</span>
+          <span className="eng-cap">learned</span>
+        </div>
+        <div style={{ marginLeft: 'auto', display: 'flex', gap: 6 }}>
+          <button className="btn" onClick={() => void window.study.next()} title="Show a word right now">
+            New word
+          </button>
+          <button
+            className={`btn${due > 0 ? ' on' : ''}`}
+            onClick={() => openTab('vocab', 'deck')}
+          >
+            {due > 0 ? `Review ${due}` : 'Open deck'}
+          </button>
+        </div>
+      </div>
+      <p className="eng-hint">
+        {study.enabled ? (
+          <>
+            New words are fetched live (level <strong>{study.level}</strong>) <strong>every {study.intervalMin} min</strong>{' '}
+            while You is open — a card on screen, or a notification if you're elsewhere.
+          </>
+        ) : (
+          <>Word reminders are off. Turn them on in Settings, or fetch one with the button above.</>
+        )}{' '}
+        Add your own with <kbd>Ctrl+Shift+E</kbd>.
+      </p>
+    </div>
+  )
+}
+
 /* ═══════════════════════════════════════════════════════════════════
    MAIN HOME TAB
    ═══════════════════════════════════════════════════════════════════ */
@@ -465,19 +653,18 @@ export function HomeTab(): JSX.Element {
   const [now,       setNow]       = useState(() => new Date())
   const [draft,     setDraft]     = useState('')
   const [scratch,   setScratch]   = useState(() => { try { return localStorage.getItem('ub.scratch') ?? '' } catch { return '' } })
-  const [scratchSt, setScratchSt] = useState('')
   const [sessions,  setSessions]  = useState<FocusSession[]>(() => loadJ('ub.sessions', []))
 
   useEffect(() => { const t = setInterval(() => setNow(new Date()), 1000); return () => clearInterval(t) }, [])
 
   useEffect(() => {
     const t = setTimeout(() => {
-      try { localStorage.setItem('ub.scratch', scratch); setScratchSt(scratch ? `saved ${new Date().toLocaleTimeString()}` : '') } catch { setScratchSt('') }
+      try { localStorage.setItem('ub.scratch', scratch) } catch { /* private mode */ }
     }, 400)
     return () => clearTimeout(t)
   }, [scratch])
 
-  const notes     = useMemo(() => recentVaultFiles(tree, ['.md', '.mf', '.excalidraw'], 6), [tree])
+  const notes     = useMemo(() => recentVaultFiles(tree, ['.md', '.mf', '.excalidraw', '.kanban'], 6), [tree])
   const openCount = todos.filter((t) => !t.done).length
   const doneCount = todos.length - openCount
 
@@ -495,10 +682,14 @@ export function HomeTab(): JSX.Element {
 
   const handleSessionDone = (mins: number): void => {
     const label = `${POMO_PRESETS.find(p => p.work === mins)?.label ?? 'Focus'} session`
-    const s: FocusSession = { id: String(Date.now()), label, mins, at: Date.now() }
-    const updated = [...sessions, s]
-    setSessions(updated)
-    saveJ('ub.sessions', updated)
+    const s: FocusSession = { id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`, label, mins, at: Date.now() }
+    // functional update: the timer fires this from its own effect, so the
+    // closed-over `sessions` array would otherwise go stale and drop entries
+    setSessions((prev) => {
+      const updated = [...prev, s]
+      saveJ('ub.sessions', updated)
+      return updated
+    })
   }
 
   return (
@@ -515,6 +706,18 @@ export function HomeTab(): JSX.Element {
 
       {/* ── Daily stats strip ────────────────────────────────────── */}
       <DailyStats sessions={sessions} />
+
+      {/* ── Weekly plan ──────────────────────────────────────────── */}
+      <section className="home-card" style={{ marginBottom: 16 }}>
+        <h3><span className="home-card-icon">🗓️</span> WEEKLY PLAN</h3>
+        <WeeklyPlan />
+      </section>
+
+      {/* ── English ──────────────────────────────────────────────── */}
+      <section className="home-card" style={{ marginBottom: 16 }}>
+        <h3><span className="home-card-icon">🔤</span> ENGLISH</h3>
+        <EnglishCard openTab={openTab} />
+      </section>
 
       {/* ── Row 1: Pomodoro + Focus Log ──────────────────────────── */}
       <div className="home-grid-3">
@@ -597,8 +800,7 @@ export function HomeTab(): JSX.Element {
         <h3>
           <span className="home-card-icon">💭</span> SCRATCHPAD
           <span className="todo-count">
-            {scratchSt}
-            {scratch.trim() ? ` · ${scratch.trim().split(/\s+/).length} words` : ''}
+            {scratch.trim() ? `${scratch.trim().split(/\s+/).length} words` : ''}
           </span>
         </h3>
         <textarea

@@ -1,4 +1,4 @@
-export type TabType = 'web' | 'markdown' | 'excalidraw' | 'pdf' | 'home' | 'kanban'
+export type TabType = 'web' | 'markdown' | 'excalidraw' | 'pdf' | 'home' | 'kanban' | 'terminal' | 'calendar' | 'vocab'
 
 export interface Tab {
   id: string
@@ -10,7 +10,10 @@ export interface Tab {
 
 export function titleFor(type: TabType, target: string): string {
   if (type === 'home') return 'Home'
-  if (type === 'kanban') return 'Board'
+  if (type === 'kanban') return target === 'board' ? 'Board' : target.split('/').pop() || target
+  if (type === 'vocab') return target === 'deck' ? 'Vocabulary' : target.split('/').pop() || target
+  if (type === 'calendar') return 'Calendar'
+  if (type === 'terminal') return target ? `nvim ${target.split('/').pop()}` : 'Terminal'
   if (type === 'web') {
     try {
       return new URL(target).hostname.replace(/^www\./, '') || target
@@ -24,6 +27,8 @@ export function titleFor(type: TabType, target: string): string {
 export function typeForPath(path: string): TabType {
   if (path.endsWith('.md') || path.endsWith('.mf')) return 'markdown'
   if (path.endsWith('.excalidraw')) return 'excalidraw'
+  if (path.endsWith('.kanban')) return 'kanban'
+  if (path.endsWith('.vocab')) return 'vocab'
   if (path.endsWith('.pdf')) return 'pdf'
   return 'markdown'
 }
@@ -32,7 +37,7 @@ export function typeForPath(path: string): TabType {
 export function normalizeInput(input: string): { type: TabType; target: string } {
   const v = input.trim()
   if (!v) return { type: 'web', target: 'https://www.google.com' }
-  if (v.endsWith('.md') || v.endsWith('.mf') || v.endsWith('.excalidraw') || v.endsWith('.pdf')) {
+  if (v.endsWith('.md') || v.endsWith('.mf') || v.endsWith('.excalidraw') || v.endsWith('.kanban') || v.endsWith('.vocab') || v.endsWith('.pdf')) {
     if (/^https?:\/\//.test(v)) return { type: 'pdf', target: v }
     return { type: typeForPath(v), target: v }
   }

@@ -1,9 +1,29 @@
-import { app, BrowserWindow, dialog, ipcMain, nativeTheme, session, shell } from 'electron'
+import { app, BrowserWindow, dialog, ipcMain, nativeTheme, Notification, session, shell } from 'electron'
+
+// Stable window class so taskbars/docks group the app under one icon
+// (matches StartupWMClass in you.desktop).
+app.commandLine.appendSwitch('class', 'You')
+// Display name everywhere (window titles, notifications, WM_CLASS).
+// userData stays pinned below, so existing settings/vault/engine/cache
+// keep working instead of moving to a fresh folder.
+app.setName('You')
+app.setPath('userData', join(app.getPath('appData'), 'unibrowser'))
 import { join, relative, resolve, sep } from 'path'
-import { promises as fs } from 'fs'
+import { promises as fs, constants as fsConstants, accessSync } from 'fs'
 import { watch, type FSWatcher } from 'chokidar'
 import { ElectronBlocker } from '@ghostery/adblocker-electron'
 import { NetworkFilter } from '@ghostery/adblocker'
+import { killTerm, resizeTerm, spawnTerm, writeTerm } from './pty'
+import { serveAppProtocol, serveWallpaperProtocol } from './protocol'
+import { DEFAULT_STUDY, normalizeStudy, type StudySettings, type WordEntry } from './study'
+import { fetchWord } from './wordsource'
+import {
+  detectWallpaper,
+  emptyWallpaperStats,
+  startWallpaperWatch,
+  type WallpaperInfo,
+  type WallpaperPayload
+} from './wallpaper'
 
 let win: BrowserWindow | null = null
 let watcher: FSWatcher | null = null
@@ -11,12 +31,23 @@ let vaultDir = ''
 let notifyTimer: NodeJS.Timeout | null = null
 let blocker: ElectronBlocker | null = null
 let adsEnabled = true
+let study: StudySettings = { ...DEFAULT_STUDY }
+let studyTimer: NodeJS.Timeout | null = null
+let studyFiring = false
+/** The wallpaper the "Wallpaper" theme derives its colours from (null = none found). */
+let wallpaperInfo: WallpaperInfo | null = null
+/** User-chosen image that overrides detection ('' = follow the desktop). */
+let manualWallpaper = ''
+/** How the live wallpaper watch is doing — makes "is it following?" visible. */
+const wallpaperStats = emptyWallpaperStats()
 
 // --- settings (persist chosen vault across restarts) ---
 
 interface Settings {
   vaultPath?: string
   adsEnabled?: boolean
+  study?: StudySettings
+  wallpaperPath?: string
 }
 
 function settingsFile(): string {
@@ -175,26 +206,113 @@ async function setAdsEnabled(on: boolean): Promise<boolean> {
   return adsEnabled
 }
 
+// --- English word feeder ---------------------------------------------------
+// The system owns word sourcing: on a timer it picks a B1 word from the
+// bundled bank (see study.ts) and either drops it into the app as an overlay
+// card (when You is focused) or fires a native notification (when it isn't).
+// Clicking that notification focuses the window and shows the card.
+
+function armStudy(): void {
+  if (studyTimer) {
+    clearInterval(studyTimer)
+    studyTimer = null
+  }
+  if (!study.enabled) return
+  const ms = Math.max(1, study.intervalMin) * 60_000
+  studyTimer = setInterval(() => void fireStudy(false), ms)
+}
+
+async function fireStudy(manual: boolean): Promise<WordEntry | null> {
+  if (!study.enabled && !manual) return null
+  if (studyFiring) return null
+  studyFiring = true
+  try {
+    const word = await fetchWord(study)
+    if (!word) return null
+
+    const consume = async (): Promise<void> => {
+      study = { ...study, seen: [...study.seen, word.word].slice(-1000) }
+      await saveSettings({ study })
+    }
+
+    if (!win || win.isDestroyed()) {
+      await consume()
+      return word
+    }
+
+    const focused = win.isFocused()
+    if (manual || focused || !Notification.isSupported()) {
+      await consume()
+      win.webContents.send('study:word', word)
+    } else {
+      // attention-grabber only. The word isn't consumed yet, so if the notice
+      // is ignored it can come round again instead of being silently spent.
+      const note = new Notification({
+        title: `New word · ${word.word}`,
+        body: word.meaning
+      })
+      note.on('click', () => {
+        void consume().then(() => {
+          win?.show()
+          win?.focus()
+          win?.webContents.send('study:word', word)
+        })
+      })
+      note.show()
+    }
+    return word
+  } finally {
+    studyFiring = false
+    if (manual) armStudy()
+  }
+}
+
 // --- app-wide shortcuts that must fire even when a webview page has focus ---
 // (Renderer keydown never sees keys typed inside a guest page, so the main
 // process intercepts them pre-dispatch for both host and guest contents.)
 
-function isPlainCtrl(input: Electron.Input): boolean {
-  return input.type === 'keyDown' && !input.alt && !input.shift && (input.control || input.meta)
-}
-
 app.on('web-contents-created', (_e, contents) => {
   contents.on('before-input-event', (event, input) => {
-    if (!isPlainCtrl(input)) return
+    // Alt+1..4 jumps to Vault / Board / Calendar / Settings (toggleable).
+    // Plain Alt only — AltGr arrives as Ctrl+Alt and must keep typing.
+    if (input.type === 'keyDown' && input.alt && !input.control && !input.meta && !input.shift) {
+      const navIds = ['vault', 'kanban', 'calendar', 'settings'] as const
+      if (input.key >= '1' && input.key <= '4') {
+        event.preventDefault()
+        win?.webContents.send('nav-key', navIds[Number(input.key) - 1])
+        return
+      }
+    }
+    if (input.type !== 'keyDown' || input.alt || !(input.control || input.meta)) return
     const key = input.key.toLowerCase()
     // Ctrl+T is browser-reserved: hijack everywhere, including video pages.
-    if (key === 't') {
+    if (key === 't' && !input.shift) {
       event.preventDefault()
       win?.webContents.send('quick-open')
-    } else if (key === 'b' && contents.getType() !== 'webview') {
+    } else if (key === 'b' && !input.shift && contents.getType() !== 'webview') {
       // Ctrl+B only outside pages — never steal bold from Google Docs etc.
       event.preventDefault()
       win?.webContents.send('toggle-sidebar')
+    } else if (key === 'tab') {
+      // Ctrl+Tab / Ctrl+Shift+Tab cycles tabs, everywhere including guests
+      event.preventDefault()
+      win?.webContents.send('cycle-tab', input.shift ? -1 : 1)
+    } else if (!input.shift && key.length === 1 && key >= '1' && key <= '9') {
+      // Ctrl+1..8 jumps to tab N, Ctrl+9 to the last tab (browser convention)
+      event.preventDefault()
+      win?.webContents.send('goto-tab', Number(key) - 1)
+    } else if (key === 'f' && !input.shift) {
+      // Ctrl+F find: renderer decides web find-bar vs note search panel
+      event.preventDefault()
+      win?.webContents.send('find-open')
+    } else if (key === 'enter' && !input.shift) {
+      // Ctrl+Enter: root terminal — focus it, or open one at the vault root
+      event.preventDefault()
+      win?.webContents.send('open-terminal')
+    } else if (key === 'e' && input.shift) {
+      // Ctrl+Shift+E: capture the current selection as a vocabulary word
+      event.preventDefault()
+      win?.webContents.send('vocab-capture')
     }
   })
 })
@@ -205,6 +323,7 @@ function createWindow(): void {
   win = new BrowserWindow({
     width: 1400,
     height: 900,
+    title: 'You',
     autoHideMenuBar: true,
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
@@ -227,13 +346,20 @@ function createWindow(): void {
   if (process.env['ELECTRON_RENDERER_URL']) {
     win.loadURL(process.env['ELECTRON_RENDERER_URL'])
   } else {
-    win.loadFile(join(__dirname, '../renderer/index.html'))
+    win.loadURL('app://localhost/index.html')
   }
 }
 
 app.whenReady().then(async () => {
   await setVaultDir(await resolveVault())
   await initBlocker()
+  study = normalizeStudy((await loadSettings()).study)
+  if (!process.env['ELECTRON_RENDERER_URL']) {
+    serveAppProtocol(join(__dirname, '../renderer'))
+  }
+  // Available in dev too: the renderer decodes the wallpaper from here.
+  serveWallpaperProtocol(() => wallpaperInfo?.path ?? null)
+  manualWallpaper = (await loadSettings()).wallpaperPath ?? ''
 
   ipcMain.handle('vault:dir', () => vaultDir)
 
@@ -316,6 +442,74 @@ app.whenReady().then(async () => {
   ipcMain.handle('blocker:isEnabled', () => adsEnabled)
   ipcMain.handle('blocker:setEnabled', async (_e, on: boolean) => setAdsEnabled(on))
 
+  // --- embedded terminal / neovim (node-pty lives in main) ---
+
+  const findBin = (cmd: string): string | null => {
+    const path = process.env.PATH ?? ''
+    for (const dir of path.split(':')) {
+      const full = join(dir, cmd)
+      try {
+        accessSync(full, fsConstants.X_OK)
+        return full
+      } catch {
+        // not here — keep looking
+      }
+    }
+    return null
+  }
+
+  ipcMain.handle(
+    'term:create',
+    async (_e, opts: { cols: number; rows: number; target?: string }): Promise<{ id: string } | { error: string }> => {
+      if (!win || win.isDestroyed()) return { error: 'no window' }
+      let cwd = vaultDir
+      let file: string | null = null
+      const rel = (opts.target ?? '').trim()
+      if (rel) {
+        let full: string
+        try {
+          full = inside(rel)
+        } catch {
+          return { error: `invalid path: ${rel}` }
+        }
+        try {
+          const st = await fs.stat(full)
+          if (st.isDirectory()) cwd = full
+          else file = full
+        } catch {
+          return { error: `not found: ${rel}` }
+        }
+      }
+      const nvimBin = findBin('nvim')
+      if (file && !nvimBin) return { error: 'nvim not found in PATH — install Neovim or open a plain shell instead.' }
+      try {
+        const id = spawnTerm(win, {
+          cols: opts.cols || 80,
+          rows: opts.rows || 24,
+          cwd,
+          file,
+          nvimBin,
+          shellBin: process.env.SHELL || '/bin/bash'
+        })
+        return { id }
+      } catch (err) {
+        return { error: err instanceof Error ? err.message : String(err) }
+      }
+    }
+  )
+
+  ipcMain.handle('term:write', async (_e, v: { id: string; data: string }) => {
+    writeTerm(v.id, v.data)
+  })
+
+  ipcMain.handle('term:resize', async (_e, v: { id: string; cols: number; rows: number }) => {
+    resizeTerm(v.id, v.cols, v.rows)
+  })
+
+  ipcMain.handle('term:kill', async (_e, id: string) => {
+    killTerm(id)
+  })
+
   // Report our theme mode to Chromium so sites with native dark/light
   // support (prefers-color-scheme) follow it — including webview guests.
   ipcMain.handle('theme:setMode', (_e, m: string) => {
@@ -323,8 +517,106 @@ app.whenReady().then(async () => {
     return nativeTheme.themeSource
   })
 
+  // --- English word feeder (system-sourced B1 vocabulary) ---
+
+  ipcMain.handle('study:get', () => study)
+  ipcMain.handle('study:set', async (_e, patch: Partial<StudySettings>) => {
+    study = normalizeStudy({ ...study, ...patch })
+    await saveSettings({ study })
+    armStudy()
+    return study
+  })
+  ipcMain.handle('study:next', () => fireStudy(true))
+
+  // --- downloads: ask where, then notify on completion ---
+
+  const ses = browserSession()
+  ses.on('will-download', (_e, item) => {
+    if (!win || win.isDestroyed()) {
+      item.cancel()
+      return
+    }
+    const fallback = join(app.getPath('downloads'), item.getFilename())
+    void dialog
+      .showSaveDialog(win, { title: 'Save file', defaultPath: fallback })
+      .then((r) => {
+        if (r.canceled || !r.filePath) item.cancel()
+        else item.setSavePath(r.filePath)
+      })
+      .catch(() => item.cancel())
+    item.once('done', (_ev, state) => {
+      if (state === 'completed' && Notification.isSupported()) {
+        new Notification({ title: 'Download finished', body: item.getFilename() }).show()
+      }
+    })
+  })
+
+  // --- wallpaper: source for the "Wallpaper" theme ---
+
+  const wallpaperPayload = (info: WallpaperInfo | null): WallpaperPayload | null =>
+    info ? { ...info, manual: manualWallpaper !== '', ...wallpaperStats } : null
+
+  const pushWallpaper = (info: WallpaperInfo | null): void => {
+    if (win && !win.isDestroyed()) win.webContents.send('wallpaper:changed', wallpaperPayload(info))
+  }
+
+  ipcMain.handle('wallpaper:get', async () => {
+    if (!wallpaperInfo) wallpaperInfo = await detectWallpaper(manualWallpaper || null)
+    return wallpaperPayload(wallpaperInfo)
+  })
+
+  ipcMain.handle('wallpaper:refresh', async () => {
+    wallpaperInfo = await detectWallpaper(manualWallpaper || null)
+    return wallpaperPayload(wallpaperInfo)
+  })
+
+  ipcMain.handle('wallpaper:pick', async () => {
+    if (!win || win.isDestroyed()) return null
+    const r = await dialog.showOpenDialog(win, {
+      title: 'Choose a wallpaper image',
+      properties: ['openFile'],
+      filters: [{ name: 'Images', extensions: ['png', 'jpg', 'jpeg', 'webp', 'avif', 'bmp', 'gif', 'svg'] }]
+    })
+    if (r.canceled || r.filePaths.length === 0) return null
+    const picked = r.filePaths[0] as string
+    // Only commit the override if the choice really resolves to an image —
+    // otherwise detectWallpaper silently falls back and we'd persist a path the
+    // user never sees used.
+    const info = await detectWallpaper(picked)
+    if (!info || info.via !== 'manual') return null
+    manualWallpaper = picked
+    await saveSettings({ wallpaperPath: manualWallpaper })
+    wallpaperInfo = info
+    pushWallpaper(info)
+    return wallpaperPayload(info)
+  })
+
+  ipcMain.handle('wallpaper:clear', async () => {
+    manualWallpaper = ''
+    await saveSettings({ wallpaperPath: '' })
+    wallpaperInfo = await detectWallpaper(null)
+    pushWallpaper(wallpaperInfo)
+    return wallpaperPayload(wallpaperInfo)
+  })
+
   createWindow()
   startWatcher()
+  // Follow the desktop wallpaper: instant on Plasma rewriting its config, plus a
+  // straight re-read every few seconds so a missed filesystem event can never
+  // leave the theme stuck on yesterday's colours.
+  startWallpaperWatch(
+    () => manualWallpaper || null,
+    (info) => {
+      wallpaperInfo = info
+      pushWallpaper(info)
+    },
+    {
+      stats: wallpaperStats,
+      // Lands in the journal (and in the terminal under `npm run dev`).
+      log: (message) => console.log(`[wallpaper] ${message}`)
+    }
+  )
+  armStudy()
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow()

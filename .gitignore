@@ -1,5 +1,11 @@
 node_modules
 out
 dist
+release
+src/renderer/public/pdfjs/build
+src/renderer/public/pdfjs/external
+src/renderer/public/pdfjs/vendor
+src/renderer/public/pdfjs/web/standard_fonts
 *.log
 .DS_Store
+*.AppImage

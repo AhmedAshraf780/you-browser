@@ -1,10 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
-import { useStore } from '../store'
 import { Tab } from '../tabs'
 
 // Lazy-load Excalidraw so a missing/slow install doesn't break the shell.
 export function ExcalidrawTab({ tab }: { tab: Tab }): JSX.Element {
-  const mode = useStore((s) => s.mode)
   const [Comp, setComp] = useState<React.ComponentType<{
     initialData: unknown
     scrollToContent?: boolean
@@ -50,8 +48,8 @@ export function ExcalidrawTab({ tab }: { tab: Tab }): JSX.Element {
   useEffect(() => {
     const t = setInterval(() => {
       if (pending.current) {
-        window.vault.write(tab.target, JSON.stringify(pending.current, null, 2)).then(() => {
-          setStatus(`saved ${new Date().toLocaleTimeString()}`)
+        window.vault.write(tab.target, JSON.stringify(pending.current, null, 2)).catch(() => {
+          // save failed — next tick retries
         })
         pending.current = null
       }
@@ -66,14 +64,13 @@ export function ExcalidrawTab({ tab }: { tab: Tab }): JSX.Element {
   return (
     <div style={{ height: '100%', display: 'flex', flexDirection: 'column', minHeight: 0 }}>
       <div style={{ fontSize: 11, color: 'var(--text-dim)', padding: '6px 10px', background: 'var(--bg-soft)' }}>
-        {tab.target} · {status}
+        {tab.target}
       </div>
       {/* Excalidraw needs a sized box: flex:1 alone collapses without minHeight:0 + relative */}
       <div style={{ flex: 1, minHeight: 0, position: 'relative' }}>
         <Comp
           initialData={initialData}
           scrollToContent={true}
-          theme={mode}
           onChange={(elements) => {
             pending.current = { elements }
           }}

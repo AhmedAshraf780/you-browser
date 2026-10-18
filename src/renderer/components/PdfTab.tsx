@@ -1,6 +1,10 @@
 import { useEffect, useState } from 'react'
 import { Tab } from '../tabs'
 
+/**
+ * Local vault PDFs render in our Firefox-style viewer (PDF.js, offline);
+ * remote http(s) PDFs keep the native Chromium viewer (avoids CORS walls).
+ */
 export function PdfTab({ tab }: { tab: Tab }): JSX.Element {
   const [url, setUrl] = useState<string>('')
   const [err, setErr] = useState('')
@@ -17,7 +21,7 @@ export function PdfTab({ tab }: { tab: Tab }): JSX.Element {
         const bytes = Uint8Array.from(atob(r.data), (c) => c.charCodeAt(0))
         const blob = new Blob([bytes], { type: 'application/pdf' })
         objUrl = URL.createObjectURL(blob)
-        setUrl(objUrl)
+        setUrl(`pdfjs/web/viewer.html?file=${encodeURIComponent(objUrl)}`)
       })
       .catch((e) => setErr(String(e)))
     return () => {

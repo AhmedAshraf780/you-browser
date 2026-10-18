@@ -1,13 +1,15 @@
 import { useMemo, useState } from 'react'
-import { useStore } from '../store'
+import { freshBoard, useStore } from '../store'
 import { typeForPath } from '../tabs'
 import { TreeNode, baseName, joinPath, parentDir } from '../vault'
 
-type CreateKind = 'md' | 'excalidraw' | 'folder'
+type CreateKind = 'md' | 'excalidraw' | 'kanban' | 'vocab' | 'folder'
 
 const KIND_LABEL: Record<CreateKind, string> = {
   md: 'note.md',
   excalidraw: 'drawing.excalidraw',
+  kanban: 'board.kanban',
+  vocab: 'deck.vocab',
   folder: 'folder'
 }
 
@@ -102,6 +104,12 @@ export function FileExplorer(): JSX.Element {
         if (c.kind === 'md') {
           if (!/\.(md|mf)$/i.test(target)) target += '.md'
           await window.vault.write(target, `# ${baseName(target)}\n\n`)
+        } else if (c.kind === 'kanban') {
+          if (!/\.kanban$/i.test(target)) target += '.kanban'
+          await window.vault.write(target, JSON.stringify({ version: 1, columns: freshBoard() }, null, 2))
+        } else if (c.kind === 'vocab') {
+          if (!/\.vocab$/i.test(target)) target += '.vocab'
+          await window.vault.write(target, JSON.stringify({ version: 1, cards: [] }, null, 2))
         } else {
           if (!/\.excalidraw$/i.test(target)) target += '.excalidraw'
           await window.vault.write(target, JSON.stringify({ elements: [] }))
@@ -192,6 +200,12 @@ export function FileExplorer(): JSX.Element {
         <button className="btn" style={{ flex: 1, background: 'var(--bg-raise)' }} onClick={() => startCreate('', 'excalidraw')} title="New drawing in vault root">
           + Draw
         </button>
+        <button className="btn" style={{ flex: 1, background: 'var(--bg-raise)' }} onClick={() => startCreate('', 'kanban')} title="New board in vault root">
+          + Board
+        </button>
+        <button className="btn" style={{ flex: 1, background: 'var(--bg-raise)' }} onClick={() => startCreate('', 'vocab')} title="New vocabulary deck in vault root">
+          + Deck
+        </button>
         <button className="btn" style={{ flex: 1, background: 'var(--bg-raise)' }} onClick={() => startCreate('', 'folder')} title="New folder in vault root">
           + Folder
         </button>
@@ -236,6 +250,10 @@ export function FileExplorer(): JSX.Element {
                 setRenaming(node.path)
               }}
               onDelete={removeNode}
+              onOpenTerminal={(node) => {
+                setMenu(null)
+                openTab('terminal', node.path)
+              }}
               onClose={() => setMenu(null)}
             />
           </>
@@ -434,6 +452,7 @@ function ContextMenu({
   onCreate,
   onRename,
   onDelete,
+  onOpenTerminal,
   onClose
 }: {
   x: number
@@ -442,6 +461,7 @@ function ContextMenu({
   onCreate: (parent: string, kind: CreateKind) => void
   onRename: (node: TreeNode) => void
   onDelete: (node: TreeNode) => void
+  onOpenTerminal: (node: TreeNode) => void
   onClose: () => void
 }): JSX.Element {
   // creation target: the folder itself, the file's parent, or vault root
@@ -449,10 +469,15 @@ function ContextMenu({
   const items: Array<{ label: string; run: () => void }> = [
     { label: 'New note', run: () => onCreate(parent, 'md') },
     { label: 'New drawing', run: () => onCreate(parent, 'excalidraw') },
+    { label: 'New board', run: () => onCreate(parent, 'kanban') },
+    { label: 'New deck', run: () => onCreate(parent, 'vocab') },
     { label: 'New folder', run: () => onCreate(parent, 'folder') }
   ]
   if (node) {
     items.push(
+      node.isDir
+        ? { label: 'Terminal here', run: () => onOpenTerminal(node) }
+        : { label: 'Open in Neovim', run: () => onOpenTerminal(node) },
       { label: 'Rename', run: () => onRename(node) },
       { label: 'Delete', run: () => void onDelete(node) }
     )
