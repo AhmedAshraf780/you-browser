@@ -10,7 +10,7 @@ npm install   # downloads Electron binary (needs access to github releases)
 npm run dev   # Vite HMR + Electron
 npm run build # out/main + out/preload + out/renderer
 ```
-
+`edit`
 If `electron --version` says "failed to install correctly" in a sandbox,
 run `node node_modules/electron/install.js` once with network, then retry.
 
