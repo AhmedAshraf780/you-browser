@@ -13,8 +13,9 @@ import { promises as fs, constants as fsConstants, accessSync } from 'fs'
 import { watch, type FSWatcher } from 'chokidar'
 import { ElectronBlocker } from '@ghostery/adblocker-electron'
 import { NetworkFilter } from '@ghostery/adblocker'
+import { listFonts } from './fonts'
 import { killTerm, resizeTerm, spawnTerm, writeTerm } from './pty'
-import { serveAppProtocol, serveWallpaperProtocol } from './protocol'
+import { serveAppProtocol, serveVaultProtocol, serveWallpaperProtocol } from './protocol'
 import { DEFAULT_STUDY, normalizeStudy, type StudySettings, type WordEntry } from './study'
 import { fetchWord } from './wordsource'
 import {
@@ -273,11 +274,11 @@ async function fireStudy(manual: boolean): Promise<WordEntry | null> {
 
 app.on('web-contents-created', (_e, contents) => {
   contents.on('before-input-event', (event, input) => {
-    // Alt+1..4 jumps to Vault / Board / Calendar / Settings (toggleable).
+    // Alt+1..5 jumps to Vault / Board / Calendar / Settings / Blinko (toggleable).
     // Plain Alt only — AltGr arrives as Ctrl+Alt and must keep typing.
     if (input.type === 'keyDown' && input.alt && !input.control && !input.meta && !input.shift) {
-      const navIds = ['vault', 'kanban', 'calendar', 'settings'] as const
-      if (input.key >= '1' && input.key <= '4') {
+      const navIds = ['vault', 'kanban', 'calendar', 'settings', 'blinko'] as const
+      if (input.key >= '1' && input.key <= '5') {
         event.preventDefault()
         win?.webContents.send('nav-key', navIds[Number(input.key) - 1])
         return
@@ -359,6 +360,8 @@ app.whenReady().then(async () => {
   }
   // Available in dev too: the renderer decodes the wallpaper from here.
   serveWallpaperProtocol(() => wallpaperInfo?.path ?? null)
+  // Card images / voice notes live in the vault; serve them to the renderer.
+  serveVaultProtocol(() => vaultDir)
   manualWallpaper = (await loadSettings()).wallpaperPath ?? ''
 
   ipcMain.handle('vault:dir', () => vaultDir)
@@ -435,6 +438,7 @@ app.whenReady().then(async () => {
 
   ipcMain.handle('vault:writeBinary', async (_e, relPath: string, base64: string) => {
     const full = inside(relPath)
+    await fs.mkdir(join(full, '..'), { recursive: true })
     await fs.writeFile(full, Buffer.from(base64, 'base64'))
     return true
   })
@@ -509,6 +513,9 @@ app.whenReady().then(async () => {
   ipcMain.handle('term:kill', async (_e, id: string) => {
     killTerm(id)
   })
+
+  // Monospace families on this machine, for the terminal font picker.
+  ipcMain.handle('fonts:list', () => listFonts())
 
   // Report our theme mode to Chromium so sites with native dark/light
   // support (prefers-color-scheme) follow it — including webview guests.

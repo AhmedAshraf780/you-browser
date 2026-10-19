@@ -44,7 +44,7 @@ function stored(key: string, fallback: string): string {
   }
 }
 
-export type PanelId = 'vault' | 'kanban' | 'calendar' | 'settings'
+export type PanelId = 'vault' | 'kanban' | 'blinko' | 'calendar' | 'settings'
 
 export interface BoardCard {
   id: string
@@ -326,6 +326,10 @@ interface BrowserState {
   panel: PanelId
   panelOpen: boolean
   termFontSize: number
+  /** Chosen terminal font family ('' = automatic Nerd Font sweep). */
+  termFont: string
+  /** Card typeface for the Blinko workspace ('' = the app's UI font). */
+  blinkoFont: string
   splitTabId: string | null
   vimMode: boolean
   visits: Visit[]
@@ -351,6 +355,8 @@ interface BrowserState {
   setPanel: (v: PanelId) => void
   setPanelOpen: (v: boolean) => void
   setTermFontSize: (v: number) => void
+  setTermFont: (v: string) => void
+  setBlinkoFont: (v: string) => void
   setSplitTabId: (v: string | null) => void
   swapSplit: () => void
   setVimMode: (v: boolean) => void
@@ -382,7 +388,7 @@ interface BrowserState {
 
 const seed: Tab[] = [{ id: uid(), type: 'home', title: 'Home', target: 'home' }]
 
-const VALID_TYPES: TabType[] = ['web', 'markdown', 'excalidraw', 'pdf', 'home', 'kanban', 'calendar', 'terminal', 'vocab']
+const VALID_TYPES: TabType[] = ['web', 'markdown', 'excalidraw', 'pdf', 'home', 'kanban', 'blinko', 'calendar', 'terminal', 'vocab']
 
 function validTab(t: unknown): t is Tab {
   if (!t || typeof t !== 'object') return false
@@ -455,6 +461,8 @@ export const useStore = create<BrowserState>((set) => {
     const n = parseInt(stored('ub.termZoom', '14'), 10)
     return Number.isFinite(n) ? Math.min(30, Math.max(8, n)) : 14
   })(),
+  termFont: stored('ub.termFont', '').slice(0, 80),
+  blinkoFont: stored('ub.blinkoFont', '').slice(0, 80),
   panel: ((): PanelId => {
     const p = stored('ub.panel', 'vault')
     return p === 'settings' ? (p as PanelId) : 'vault'
@@ -602,6 +610,26 @@ export const useStore = create<BrowserState>((set) => {
         // ignore
       }
       return { termFontSize }
+    }),
+  setTermFont: (font) =>
+    set(() => {
+      const termFont = (font ?? '').slice(0, 80)
+      try {
+        localStorage.setItem('ub.termFont', termFont)
+      } catch {
+        // ignore
+      }
+      return { termFont }
+    }),
+  setBlinkoFont: (font) =>
+    set(() => {
+      const blinkoFont = (font ?? '').slice(0, 80)
+      try {
+        localStorage.setItem('ub.blinkoFont', blinkoFont)
+      } catch {
+        // ignore
+      }
+      return { blinkoFont }
     }),
   setPanel: (panel) =>
     set(() => {

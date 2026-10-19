@@ -1,8 +1,11 @@
 import { useEffect, useRef, useState } from 'react'
 import { Terminal } from '@xterm/xterm'
 import { FitAddon } from '@xterm/addon-fit'
+import { Unicode11Addon } from '@xterm/addon-unicode11'
+import { WebglAddon } from '@xterm/addon-webgl'
 import '@xterm/xterm/css/xterm.css'
 import { useStore } from '../store'
+import { termFontStack } from '../fonts'
 import { Tab } from '../tabs'
 
 type TermStatus = 'starting' | 'live' | { exited: number } | { error: string }
@@ -79,6 +82,7 @@ export function TerminalTab({ tab }: { tab: Tab }): JSX.Element {
   const ptyRef = useRef<string | null>(null)
   const mode = useStore((s) => s.mode)
   const termFontSize = useStore((s) => s.termFontSize)
+  const termFont = useStore((s) => s.termFont)
   const closeTab = useStore((s) => s.closeTab)
   const [status, setStatus] = useState<TermStatus>('starting')
 
@@ -122,12 +126,50 @@ export function TerminalTab({ tab }: { tab: Tab }): JSX.Element {
     const term = new Terminal({
       theme: termTheme(useStore.getState().mode),
       fontSize: useStore.getState().termFontSize,
-      fontFamily: "'SymbolsNerdFontMono', ui-monospace, SFMono-Regular, Menlo, monospace",
-      cursorBlink: true
+      fontFamily: termFontStack(useStore.getState().termFont),
+      // Nerd Font icon cells sit above/below the baseline; the extra leading
+      // keeps powerline runs and box drawing off the neighbouring lines.
+      lineHeight: 1.25,
+      letterSpacing: 0,
+      fontWeight: '400',
+      fontWeightBold: '700',
+      scrollback: 5000,
+      cursorBlink: true,
+      // Required by the Unicode 11 addon: terminal.unicode is a proposed API
+      // and throws on access unless this is set.
+      allowProposedApi: true
     })
     const fit = new FitAddon()
     term.loadAddon(fit)
     term.open(box)
+
+    // Unicode 11 cell widths — xterm's own wcwidth table instead of the
+    // legacy one. Emoji, ZWJ sequences and CJK land on the right columns,
+    // which matters for nvim and anything drawing box art.
+    try {
+      term.loadAddon(new Unicode11Addon())
+      term.unicode.activeVersion = '11'
+    } catch {
+      // no unicode API on this build — legacy widths still render
+    }
+
+    // GPU renderer. Two failures are expected in the wild and both just
+    // drop back to xterm's DOM renderer: WebGL2 unavailable (software
+    // rendering), and context loss (GPU process restart, tab hidden for
+    // long enough for the driver to reclaim the context).
+    let webgl: WebglAddon | null = null
+    let disposed = false
+    try {
+      webgl = new WebglAddon()
+      webgl.onContextLoss(() => {
+        if (disposed) return
+        webgl?.dispose()
+        webgl = null
+      })
+      term.loadAddon(webgl)
+    } catch {
+      webgl = null
+    }
     // Ctrl/Cmd + =/-/0 zooms the terminal instead of reaching the shell.
     // preventDefault + stopPropagation are what actually stop Chromium's
     // own page-zoom accelerator — returning false alone only stops xterm.
@@ -184,6 +226,7 @@ export function TerminalTab({ tab }: { tab: Tab }): JSX.Element {
 
     return () => {
       alive = false
+      disposed = true
       offOut()
       offExit()
       offData.dispose()
@@ -191,6 +234,7 @@ export function TerminalTab({ tab }: { tab: Tab }): JSX.Element {
       const id = ptyRef.current
       ptyRef.current = null
       if (id) void window.terminal.kill(id)
+      webgl?.dispose()
       term.dispose()
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -219,6 +263,22 @@ export function TerminalTab({ tab }: { tab: Tab }): JSX.Element {
       // hidden tab — ResizeObserver corrects on show
     }
   }, [termFontSize])
+
+  // font family switch: re-measure and tell the pty the new grid
+  useEffect(() => {
+    const term = termRef.current
+    const fit = fitRef.current
+    const id = ptyRef.current
+    if (!term || !fit) return
+    ;(term as unknown as { options: { fontFamily: string } }).options.fontFamily = termFontStack(termFont)
+    try {
+      fit.fit()
+      const dims = fit.proposeDimensions()
+      if (id && dims) void window.terminal.resize(id, dims.cols, dims.rows)
+    } catch {
+      // hidden tab — ResizeObserver corrects on show
+    }
+  }, [termFont])
 
   return (
     <div

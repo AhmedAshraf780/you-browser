@@ -19,11 +19,13 @@ import { TabIcon } from './components/TabIcon'
 import { TerminalSessions } from './components/TerminalSessions'
 import { getWebview, getEditor } from './webviews'
 import { buildVars, loadPalette, themeCss } from './walltheme'
+import { DEFAULT_BLINKO_PATH } from './blinko'
 import type { EditorView } from '@codemirror/view'
 import './styles.css'
 
 // Heavy editors stay out of the initial bundle — parsed only on first open.
 const MarkdownTab = lazy(() => import('./components/MarkdownTab').then((m) => ({ default: m.MarkdownTab })))
+const BlinkoTab = lazy(() => import('./components/BlinkoTab').then((m) => ({ default: m.BlinkoTab })))
 const TerminalTab = lazy(() => import('./components/TerminalTab').then((m) => ({ default: m.TerminalTab })))
 
 function TabFallback(): JSX.Element {
@@ -37,12 +39,14 @@ const TAB_ICONS: Record<string, string> = {
   excalidraw: '🎨',
   pdf: '📄',
   home: '⌂',
-  kanban: '▦'
+  kanban: '▦',
+  blinko: '◆'
 }
 
 const NAV: Array<{ id: PanelId; icon: string; label: string }> = [
   { id: 'vault',    icon: '⌂',  label: 'Vault'     },
   { id: 'kanban',   icon: '▥',  label: 'Board'     },
+  { id: 'blinko',   icon: '◆',  label: 'Blinko'    },
   { id: 'calendar', icon: '▦',  label: 'Calendar'  },
   { id: 'settings', icon: '⚙',  label: 'Settings'  }
 ]
@@ -213,13 +217,13 @@ export function App(): JSX.Element {
     })
     const offNav = window.shortcuts.onNavKey((id) => {
       const st = useStore.getState()
-      if (id === 'kanban' || id === 'calendar') {
+      if (id === 'kanban' || id === 'calendar' || id === 'blinko') {
         // pages toggle: open → activate → close-if-active
-        const type = id as 'kanban' | 'calendar'
+        const type = id as 'kanban' | 'calendar' | 'blinko'
         const existing = st.tabs.find((t) => t.type === type)
         if (existing && st.activeId === existing.id) st.closeTab(existing.id)
         else if (existing) st.setActive(existing.id)
-        else st.openTab(type, id === 'kanban' ? 'board' : 'calendar')
+        else st.openTab(type, id === 'kanban' ? 'board' : id === 'calendar' ? 'calendar' : DEFAULT_BLINKO_PATH)
       } else if (id === 'vault' || id === 'settings') {
         // panels toggle, same as rail click
         if (st.sidebarOpen && st.panel === id && st.panelOpen) st.setPanelOpen(false)
@@ -313,6 +317,7 @@ export function App(): JSX.Element {
       {t.type === 'pdf'        && <PdfTab tab={t} />}
       {t.type === 'home'       && <HomeTab />}
       {t.type === 'kanban'     && <KanbanTab tab={t} />}
+      {t.type === 'blinko'     && <Suspense fallback={<TabFallback />}><BlinkoTab tab={t} /></Suspense>}
       {t.type === 'vocab'      && <VocabTab tab={t} />}
       {t.type === 'calendar'   && <CalendarTab />}
       {t.type === 'terminal'   && <Suspense fallback={<TabFallback />}><TerminalTab tab={t} /></Suspense>}
@@ -322,6 +327,7 @@ export function App(): JSX.Element {
   const navClick = (id: PanelId): void => {
     // board + calendar live as full pages, not side panels
     if (id === 'kanban') { openTab('kanban', 'board'); return }
+    if (id === 'blinko') { openTab('blinko', DEFAULT_BLINKO_PATH); return }
     if (id === 'calendar') { openTab('calendar', 'calendar'); return }
     const st = useStore.getState()
     // active panel icon collapses the panel pane only — tabs sidebar stays
@@ -334,15 +340,13 @@ export function App(): JSX.Element {
   }
 
   const navSel = (id: PanelId): boolean =>
-    id === 'kanban'
-      ? active?.type === 'kanban'
-      : id === 'calendar'
-        ? active?.type === 'calendar'
-        : panel === id && panelOpen
+    id === 'kanban' || id === 'blinko' || id === 'calendar'
+      ? active?.type === id
+      : panel === id && panelOpen
 
   // Panel pane is independent from the tabs sidebar: either can collapse
   // without touching the other.
-  const showPanel = sidebarOpen && panelOpen && panel !== 'kanban' && panel !== 'calendar'
+  const showPanel = sidebarOpen && panelOpen && panel !== 'kanban' && panel !== 'blinko' && panel !== 'calendar'
 
   // Whether the active tab is a web tab (show URL bar)
   const isWeb = active?.type === 'web'

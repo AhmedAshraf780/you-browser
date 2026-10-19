@@ -1,6 +1,8 @@
+import { useEffect, useState } from 'react'
 import { useStore } from '../store'
 import { STUDY_LEVELS } from '../store'
 import { baseName } from '../vault'
+import { termFontStack, cardFontStack, CARD_FONT_PRESETS } from '../fonts'
 import { ThemeControls } from './ThemePicker'
 
 function Section({ title, children }: { title: string; children: React.ReactNode }): JSX.Element {
@@ -39,6 +41,30 @@ export function SettingsPanel(): JSX.Element {
   const refreshTree = useStore((s) => s.refreshTree)
   const wallpaper = useStore((s) => s.wallpaper)
   const setWallpaper = useStore((s) => s.setWallpaper)
+  const termFont = useStore((s) => s.termFont)
+  const setTermFont = useStore((s) => s.setTermFont)
+  const termFontSize = useStore((s) => s.termFontSize)
+  const setTermFontSize = useStore((s) => s.setTermFontSize)
+  const blinkoFont = useStore((s) => s.blinkoFont)
+  const setBlinkoFont = useStore((s) => s.setBlinkoFont)
+  const [fonts, setFonts] = useState<{ nerd: string[]; mono: string[]; sans: string[] } | null>(null)
+
+  useEffect(() => {
+    let alive = true
+    void window.fonts
+      .list()
+      .then((list) => {
+        if (alive) setFonts(list)
+      })
+      .catch(() => undefined)
+    return () => {
+      alive = false
+    }
+  }, [])
+
+  /** Is this family one fontconfig actually reports? (Generic presets are not.) */
+  const isInstalled = (family: string): boolean =>
+    !!fonts && (fonts.sans.includes(family) || fonts.mono.includes(family) || fonts.nerd.includes(family))
 
   const pickVault = async (): Promise<void> => {
     const picked = await window.vault.pick()
@@ -67,6 +93,62 @@ export function SettingsPanel(): JSX.Element {
     <div>
       <Section title="APPEARANCE">
         <ThemeControls />
+      </Section>
+
+      <Section title="BLINKO CARDS">
+        <div className="set-row" style={{ marginBottom: 4 }}>
+          <span>Card font</span>
+          <span style={{ color: 'var(--text-dim)' }}>display + editing</span>
+        </div>
+        <select
+          className="set-input set-select"
+          value={blinkoFont}
+          onChange={(e) => setBlinkoFont(e.target.value)}
+        >
+          {CARD_FONT_PRESETS.map((p) => (
+            <option key={p.value} value={p.value}>
+              {p.value === '' ? `${p.label} (Inter)` : p.label}
+            </option>
+          ))}
+          {fonts && blinkoFont && !isInstalled(blinkoFont) && (
+            <option value={blinkoFont}>{blinkoFont} (not installed)</option>
+          )}
+          {fonts && fonts.sans.length > 0 && (
+            <optgroup label="Installed — proportional">
+              {fonts.sans.map((f) => (
+                <option key={f} value={f}>
+                  {f}
+                </option>
+              ))}
+            </optgroup>
+          )}
+          {fonts && fonts.mono.length > 0 && (
+            <optgroup label="Installed — monospace">
+              {fonts.mono.map((f) => (
+                <option key={f} value={f}>
+                  {f}
+                </option>
+              ))}
+            </optgroup>
+          )}
+          {fonts && fonts.nerd.length > 0 && (
+            <optgroup label="Nerd Fonts">
+              {fonts.nerd.map((f) => (
+                <option key={f} value={f}>
+                  {f}
+                </option>
+              ))}
+            </optgroup>
+          )}
+        </select>
+        <div className="blp-font-preview" style={{ fontFamily: cardFontStack(blinkoFont) || undefined }}>
+          <strong>Blinko</strong> cards render <em>live</em> as you type —{' '}
+          <code>inline code</code> stays monospaced.
+        </div>
+        <p className="set-note">
+          Applies to a card&apos;s Markdown both while it is displayed and while it is being edited,
+          so the two never disagree.
+        </p>
       </Section>
 
       <Section title="WALLPAPER">
@@ -135,6 +217,60 @@ export function SettingsPanel(): JSX.Element {
         </div>
         <p className="set-note">
           Docks the tab rail and panel to either edge. Takes effect instantly and is remembered.
+        </p>
+      </Section>
+
+      <Section title="TERMINAL">
+        <div className="set-row" style={{ marginBottom: 4 }}>
+          <span>Font</span>
+          <span style={{ color: 'var(--text-dim)' }}>{termFontSize}px · Ctrl ±</span>
+        </div>
+        <select
+          className="set-input set-select"
+          value={termFont}
+          onChange={(e) => setTermFont(e.target.value)}
+        >
+          <option value="">Automatic — best Nerd Font installed</option>
+          {fonts && termFont && !fonts.nerd.includes(termFont) && !fonts.mono.includes(termFont) && (
+            <option value={termFont}>{termFont} (not installed)</option>
+          )}
+          {fonts && fonts.nerd.length > 0 && (
+            <optgroup label="Nerd Fonts (icons included)">
+              {fonts.nerd.map((f) => (
+                <option key={f} value={f}>
+                  {/propo/i.test(f) ? `${f} · proportional` : f}
+                </option>
+              ))}
+            </optgroup>
+          )}
+          {fonts && fonts.mono.length > 0 && (
+            <optgroup label="Other monospace">
+              {fonts.mono.map((f) => (
+                <option key={f} value={f}>
+                  {f}
+                </option>
+              ))}
+            </optgroup>
+          )}
+        </select>
+        <div className="term-preview" style={{ fontFamily: termFontStack(termFont) }}>
+          ⚡ ~/vault  main ± ✚  │  0O 1lI  →  ✓ ✗  ╭─╮
+        </div>
+        <div style={{ display: 'flex', gap: 4 }}>
+          <button className="btn" style={{ flex: 1 }} onClick={() => setTermFontSize(termFontSize - 1)}>
+            −
+          </button>
+          <button className="btn" style={{ flex: 1 }} onClick={() => setTermFontSize(14)}>
+            14px
+          </button>
+          <button className="btn" style={{ flex: 1 }} onClick={() => setTermFontSize(termFontSize + 1)}>
+            +
+          </button>
+        </div>
+        <p className="set-note">
+          {fonts && fonts.nerd.length === 0
+            ? 'No Nerd Font found — install one (e.g. ttf-meslo-nerd) to get icons, devicons and powerline glyphs in the terminal.'
+            : 'Patched Nerd Fonts render letters and icons from one typeface — a “Mono” variant keeps every glyph on one column width. The choice is remembered and applies to every terminal tab at once.'}
         </p>
       </Section>
 

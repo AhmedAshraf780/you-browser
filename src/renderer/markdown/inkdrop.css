@@ -1,0 +1,2524 @@
+/* ═══════════════════════════════════════════════════════════════════════════
+   INKDROP 6.2.0 MARKDOWN PREVIEW
+   ═══════════════════════════════════════════════════════════════════════════
+
+   Ported from @inkdropapp/css (markdown.css, syntax.css, tokens.css, ui.css)
+   plus the layout rules from the app bundle. Scoped so the preview is
+   pixel-faithful to Inkdrop while inheriting the host app's palette:
+
+     `tok-*` spans come from src/renderer/markdown/highlight.ts
+     DOM comes from src/renderer/markdown/pipeline.ts + code.ts
+*/
+
+/* light-dark() picks the dark variant of Inkdrop tokens in dark mode */
+:root[data-mode='dark'] {
+  color-scheme: dark;
+}
+:root[data-mode='light'] {
+  color-scheme: light;
+}
+
+/* ── Inkdrop → app theme bridge ─────────────────────────────────────────── */
+:root {
+  --text-color: var(--text);
+  --muted-text-color: var(--text-dim);
+  --light-text-color: var(--text-muted);
+  --disabled-text-color: var(--text-muted);
+  --border-color: var(--border);
+  --solid-border-color: var(--border);
+  --strong-border-color: var(--border);
+  --link-color: var(--accent);
+  --primary-color: var(--accent);
+  --primary-color-active: var(--accent);
+  --negative-color: light-dark(hsl(var(--hsl-red-500)), var(--color-red-500));
+  --success-color: light-dark(var(--color-green-600), var(--color-emerald-400));
+
+  /* Inkdrop neutral text ladder (ui.css) — kept for placeholder/disabled ink */
+  --dark-text-color: light-dark(hsl(var(--hsl-black) / 85%), hsl(var(--hsl-neutral-50) / 40%));
+
+  /* Elevation (ui.css) — used by editor tooltips / floating layers */
+  --subtle-shadow: 0px 1px 2px 0 light-dark(var(--border-color), var(--color-black));
+  --floating-shadow:
+    0px 2px 4px 0px light-dark(rgba(34, 36, 38, 0.12), hsl(var(--hsl-black) / 20%)),
+    0px 2px 10px 0px light-dark(rgba(34, 36, 38, 0.15), hsl(var(--hsl-black) / 30%));
+  --raised-shadow:
+    0 1.5px 3px -2px hsl(var(--hsl-black) / 0.4), 0 4px 6px hsl(var(--hsl-black) / 0.2),
+    0 8px 12px -1px hsl(var(--hsl-black) / 0.1);
+
+  /* Readable column width (Inkdrop default 740px, overridable by app) */
+  --readable-line-length-width: 740px;
+
+  /* Floating layers (ui.css) — used by the mermaid toolbar */
+  --editor-floating-actions-background: light-dark(
+    hsl(var(--hsl-white) / 60%),
+    hsl(var(--hsl-neutral-800) / 60%)
+  );
+
+  --off-white: var(--color-gray-50);
+  --subtle-transparent-black: light-dark(rgba(0, 0, 0, 0.03), rgba(0, 0, 0, 0.06));
+  --transparent-black: light-dark(rgba(0, 0, 0, 0.05), rgba(0, 0, 0, 0.1));
+  --strong-transparent-black: light-dark(rgba(0, 0, 0, 0.1), rgba(0, 0, 0, 0.2));
+  --subtle-transparent-white: rgba(255, 255, 255, 0.02);
+  --transparent-white: rgba(255, 255, 255, 0.08);
+  --strong-transparent-white: rgba(255, 255, 255, 0.15);
+
+  --kbd-color: var(--muted-text-color);
+  --kbd-background: light-dark(var(--off-white), var(--subtle-transparent-white));
+  --kbd-border-color: var(--border-color);
+
+  /* Heading sizes from ui.css */
+  --h1: 2em;
+  --h2: 1.5em;
+  --h3: 1.25em;
+  --h4: 1em;
+  --h5: 0.875em;
+  --h6: 0.85em;
+}
+
+/* ── Preview scroll container (app bundle) ──────────────────────────────── */
+.mde-preview-container {
+  user-select: text;
+  box-sizing: border-box;
+  border: none;
+  flex-direction: row;
+  flex: 1;
+  justify-content: center;
+  min-width: 0;
+  height: 100%;
+  display: flex;
+  overflow: auto;
+}
+
+.mde-preview-container .mde-preview {
+  flex: 0 1 var(--readable-line-length-width, 740px);
+  min-width: 0;
+  padding: 10px;
+  display: block;
+}
+
+
+/* ═══ tokens.css — primitive design tokens ═══ */
+
+  :where(:root, :host) {
+    --font-weights-thin: 100;
+    --font-weights-extralight: 200;
+    --font-weights-light: 300;
+    --font-weights-normal: 400;
+    --font-weights-medium: 500;
+    --font-weights-semibold: 600;
+    --font-weights-bold: 700;
+    --font-weights-extrabold: 800;
+    --font-weights-black: 900;
+    --color-current: currentColor;
+    --color-black: #000;
+    --color-white: #fff;
+    --color-transparent: rgb(0 0 0 / 0);
+    --hsl-black: 0deg 0% 0%;
+    --hsl-white: 0deg 100% 100%;
+    --hsl-rose-50: 356deg 100% 97%;
+    --hsl-rose-100: 356deg 100% 95%;
+    --hsl-rose-200: 353deg 96% 90%;
+    --hsl-rose-300: 353deg 96% 82%;
+    --hsl-rose-400: 351deg 95% 71%;
+    --hsl-rose-500: 350deg 89% 60%;
+    --hsl-rose-600: 347deg 77% 50%;
+    --hsl-rose-700: 345deg 83% 41%;
+    --hsl-rose-800: 343deg 80% 35%;
+    --hsl-rose-900: 342deg 75% 30%;
+    --hsl-rose-950: 343deg 88% 16%;
+    --hsl-pink-50: 327deg 73% 97%;
+    --hsl-pink-100: 326deg 78% 95%;
+    --hsl-pink-200: 326deg 85% 90%;
+    --hsl-pink-300: 327deg 87% 82%;
+    --hsl-pink-400: 329deg 86% 70%;
+    --hsl-pink-500: 330deg 81% 60%;
+    --hsl-pink-600: 333deg 71% 51%;
+    --hsl-pink-700: 335deg 78% 42%;
+    --hsl-pink-800: 336deg 74% 35%;
+    --hsl-pink-900: 336deg 69% 30%;
+    --hsl-pink-950: 336deg 84% 17%;
+    --hsl-fuchsia-50: 289deg 100% 98%;
+    --hsl-fuchsia-100: 287deg 100% 95%;
+    --hsl-fuchsia-200: 288deg 96% 91%;
+    --hsl-fuchsia-300: 291deg 93% 83%;
+    --hsl-fuchsia-400: 292deg 91% 73%;
+    --hsl-fuchsia-500: 292deg 84% 61%;
+    --hsl-fuchsia-600: 293deg 69% 49%;
+    --hsl-fuchsia-700: 295deg 72% 40%;
+    --hsl-fuchsia-800: 295deg 70% 33%;
+    --hsl-fuchsia-900: 297deg 64% 28%;
+    --hsl-fuchsia-950: 297deg 90% 16%;
+    --hsl-purple-50: 270deg 100% 98%;
+    --hsl-purple-100: 269deg 100% 95%;
+    --hsl-purple-200: 269deg 100% 92%;
+    --hsl-purple-300: 269deg 97% 85%;
+    --hsl-purple-400: 270deg 95% 75%;
+    --hsl-purple-500: 271deg 91% 65%;
+    --hsl-purple-600: 271deg 81% 56%;
+    --hsl-purple-700: 272deg 72% 47%;
+    --hsl-purple-800: 273deg 67% 39%;
+    --hsl-purple-900: 274deg 66% 32%;
+    --hsl-purple-950: 274deg 87% 21%;
+    --hsl-violet-50: 250deg 100% 98%;
+    --hsl-violet-100: 251deg 91% 95%;
+    --hsl-violet-200: 251deg 95% 92%;
+    --hsl-violet-300: 252deg 95% 85%;
+    --hsl-violet-400: 255deg 92% 76%;
+    --hsl-violet-500: 258deg 90% 66%;
+    --hsl-violet-600: 262deg 83% 58%;
+    --hsl-violet-700: 263deg 70% 50%;
+    --hsl-violet-800: 263deg 69% 42%;
+    --hsl-violet-900: 264deg 67% 35%;
+    --hsl-violet-950: 261deg 73% 23%;
+    --hsl-indigo-50: 226deg 100% 97%;
+    --hsl-indigo-100: 226deg 100% 94%;
+    --hsl-indigo-200: 228deg 96% 89%;
+    --hsl-indigo-300: 230deg 94% 82%;
+    --hsl-indigo-400: 234deg 89% 74%;
+    --hsl-indigo-500: 239deg 84% 67%;
+    --hsl-indigo-600: 243deg 75% 59%;
+    --hsl-indigo-700: 245deg 58% 51%;
+    --hsl-indigo-800: 244deg 55% 41%;
+    --hsl-indigo-900: 242deg 47% 34%;
+    --hsl-indigo-950: 244deg 47% 20%;
+    --hsl-blue-50: 214deg 100% 97%;
+    --hsl-blue-100: 214deg 95% 93%;
+    --hsl-blue-200: 213deg 97% 87%;
+    --hsl-blue-300: 212deg 96% 78%;
+    --hsl-blue-400: 213deg 94% 68%;
+    --hsl-blue-500: 217deg 91% 60%;
+    --hsl-blue-600: 221deg 83% 53%;
+    --hsl-blue-700: 224deg 76% 48%;
+    --hsl-blue-800: 226deg 71% 40%;
+    --hsl-blue-900: 224deg 64% 33%;
+    --hsl-blue-950: 226deg 57% 21%;
+    --hsl-sky-50: 204deg 100% 97%;
+    --hsl-sky-100: 204deg 94% 94%;
+    --hsl-sky-200: 201deg 94% 86%;
+    --hsl-sky-300: 199deg 95% 74%;
+    --hsl-sky-400: 198deg 93% 60%;
+    --hsl-sky-500: 199deg 89% 48%;
+    --hsl-sky-600: 200deg 98% 39%;
+    --hsl-sky-700: 201deg 96% 32%;
+    --hsl-sky-800: 201deg 90% 27%;
+    --hsl-sky-900: 202deg 80% 24%;
+    --hsl-sky-950: 204deg 80% 16%;
+    --hsl-cyan-50: 183deg 100% 96%;
+    --hsl-cyan-100: 185deg 96% 90%;
+    --hsl-cyan-200: 186deg 94% 82%;
+    --hsl-cyan-300: 187deg 92% 69%;
+    --hsl-cyan-400: 188deg 86% 53%;
+    --hsl-cyan-500: 189deg 94% 43%;
+    --hsl-cyan-600: 192deg 91% 36%;
+    --hsl-cyan-700: 193deg 82% 31%;
+    --hsl-cyan-800: 194deg 70% 27%;
+    --hsl-cyan-900: 196deg 64% 24%;
+    --hsl-cyan-950: 197deg 79% 15%;
+    --hsl-teal-50: 166deg 76% 97%;
+    --hsl-teal-100: 167deg 85% 89%;
+    --hsl-teal-200: 168deg 84% 78%;
+    --hsl-teal-300: 171deg 77% 64%;
+    --hsl-teal-400: 172deg 66% 50%;
+    --hsl-teal-500: 173deg 80% 40%;
+    --hsl-teal-600: 175deg 84% 32%;
+    --hsl-teal-700: 175deg 77% 26%;
+    --hsl-teal-800: 176deg 69% 22%;
+    --hsl-teal-900: 176deg 61% 19%;
+    --hsl-teal-950: 179deg 84% 10%;
+    --hsl-emerald-50: 152deg 81% 96%;
+    --hsl-emerald-100: 149deg 80% 90%;
+    --hsl-emerald-200: 152deg 76% 80%;
+    --hsl-emerald-300: 156deg 72% 67%;
+    --hsl-emerald-400: 158deg 64% 52%;
+    --hsl-emerald-500: 160deg 84% 39%;
+    --hsl-emerald-600: 161deg 94% 30%;
+    --hsl-emerald-700: 163deg 94% 24%;
+    --hsl-emerald-800: 163deg 88% 20%;
+    --hsl-emerald-900: 164deg 86% 16%;
+    --hsl-emerald-950: 166deg 91% 9%;
+    --hsl-green-50: 138deg 76% 97%;
+    --hsl-green-100: 141deg 84% 93%;
+    --hsl-green-200: 141deg 79% 85%;
+    --hsl-green-300: 142deg 77% 73%;
+    --hsl-green-400: 142deg 69% 58%;
+    --hsl-green-500: 142deg 71% 45%;
+    --hsl-green-600: 142deg 76% 36%;
+    --hsl-green-700: 142deg 72% 29%;
+    --hsl-green-800: 143deg 64% 24%;
+    --hsl-green-900: 144deg 61% 20%;
+    --hsl-green-950: 145deg 80% 10%;
+    --hsl-lime-50: 78deg 92% 95%;
+    --hsl-lime-100: 80deg 89% 89%;
+    --hsl-lime-200: 81deg 88% 80%;
+    --hsl-lime-300: 82deg 85% 67%;
+    --hsl-lime-400: 83deg 78% 55%;
+    --hsl-lime-500: 84deg 81% 44%;
+    --hsl-lime-600: 85deg 85% 35%;
+    --hsl-lime-700: 86deg 78% 27%;
+    --hsl-lime-800: 86deg 69% 23%;
+    --hsl-lime-900: 88deg 61% 20%;
+    --hsl-lime-950: 89deg 80% 10%;
+    --hsl-yellow-50: 55deg 92% 95%;
+    --hsl-yellow-100: 55deg 97% 88%;
+    --hsl-yellow-200: 53deg 98% 77%;
+    --hsl-yellow-300: 50deg 98% 64%;
+    --hsl-yellow-400: 48deg 96% 53%;
+    --hsl-yellow-500: 45deg 93% 47%;
+    --hsl-yellow-600: 41deg 96% 40%;
+    --hsl-yellow-700: 35deg 92% 33%;
+    --hsl-yellow-800: 32deg 81% 29%;
+    --hsl-yellow-900: 28deg 73% 26%;
+    --hsl-yellow-950: 26deg 83% 14%;
+    --hsl-amber-50: 48deg 100% 96%;
+    --hsl-amber-100: 48deg 96% 89%;
+    --hsl-amber-200: 48deg 97% 77%;
+    --hsl-amber-300: 46deg 97% 65%;
+    --hsl-amber-400: 43deg 96% 56%;
+    --hsl-amber-500: 38deg 92% 50%;
+    --hsl-amber-600: 32deg 95% 44%;
+    --hsl-amber-700: 26deg 90% 37%;
+    --hsl-amber-800: 23deg 83% 31%;
+    --hsl-amber-900: 22deg 78% 26%;
+    --hsl-amber-950: 21deg 92% 14%;
+    --hsl-orange-50: 33deg 100% 96%;
+    --hsl-orange-100: 34deg 100% 92%;
+    --hsl-orange-200: 32deg 98% 83%;
+    --hsl-orange-300: 31deg 97% 72%;
+    --hsl-orange-400: 27deg 96% 61%;
+    --hsl-orange-500: 25deg 95% 53%;
+    --hsl-orange-600: 21deg 90% 48%;
+    --hsl-orange-700: 17deg 88% 40%;
+    --hsl-orange-800: 15deg 79% 34%;
+    --hsl-orange-900: 15deg 75% 28%;
+    --hsl-orange-950: 13deg 81% 15%;
+    --hsl-red-50: 0deg 86% 97%;
+    --hsl-red-100: 0deg 93% 94%;
+    --hsl-red-200: 0deg 96% 89%;
+    --hsl-red-300: 0deg 94% 82%;
+    --hsl-red-400: 0deg 91% 71%;
+    --hsl-red-500: 0deg 84% 60%;
+    --hsl-red-600: 0deg 72% 51%;
+    --hsl-red-700: 0deg 74% 42%;
+    --hsl-red-800: 0deg 70% 35%;
+    --hsl-red-900: 0deg 63% 31%;
+    --hsl-red-950: 0deg 75% 15%;
+    --hsl-neutral-50: 0deg 0% 98%;
+    --hsl-neutral-100: 0deg 0% 96%;
+    --hsl-neutral-200: 0deg 0% 90%;
+    --hsl-neutral-300: 0deg 0% 83%;
+    --hsl-neutral-400: 0deg 0% 64%;
+    --hsl-neutral-500: 0deg 0% 45%;
+    --hsl-neutral-600: 0deg 0% 32%;
+    --hsl-neutral-700: 0deg 0% 25%;
+    --hsl-neutral-800: 0deg 0% 15%;
+    --hsl-neutral-900: 0deg 0% 9%;
+    --hsl-neutral-950: 0deg 0% 4%;
+    --hsl-stone-50: 60deg 9% 98%;
+    --hsl-stone-100: 60deg 5% 96%;
+    --hsl-stone-200: 20deg 6% 90%;
+    --hsl-stone-300: 24deg 6% 83%;
+    --hsl-stone-400: 24deg 5% 64%;
+    --hsl-stone-500: 25deg 5% 45%;
+    --hsl-stone-600: 33deg 5% 32%;
+    --hsl-stone-700: 30deg 6% 25%;
+    --hsl-stone-800: 12deg 6% 15%;
+    --hsl-stone-900: 24deg 10% 10%;
+    --hsl-stone-950: 20deg 14% 4%;
+    --hsl-zinc-50: 0deg 0% 98%;
+    --hsl-zinc-100: 240deg 5% 96%;
+    --hsl-zinc-200: 240deg 6% 90%;
+    --hsl-zinc-300: 240deg 5% 84%;
+    --hsl-zinc-400: 240deg 5% 65%;
+    --hsl-zinc-500: 240deg 4% 46%;
+    --hsl-zinc-600: 240deg 5% 34%;
+    --hsl-zinc-700: 240deg 5% 26%;
+    --hsl-zinc-800: 240deg 4% 16%;
+    --hsl-zinc-900: 240deg 6% 10%;
+    --hsl-zinc-950: 240deg 10% 4%;
+    --hsl-gray-50: 210deg 20% 98%;
+    --hsl-gray-100: 220deg 14% 96%;
+    --hsl-gray-200: 220deg 13% 91%;
+    --hsl-gray-300: 216deg 12% 84%;
+    --hsl-gray-400: 218deg 11% 65%;
+    --hsl-gray-500: 220deg 9% 46%;
+    --hsl-gray-600: 215deg 14% 34%;
+    --hsl-gray-700: 217deg 19% 27%;
+    --hsl-gray-800: 215deg 28% 17%;
+    --hsl-gray-900: 221deg 39% 11%;
+    --hsl-gray-950: 224deg 71% 4%;
+    --hsl-slate-50: 210deg 40% 98%;
+    --hsl-slate-100: 210deg 40% 96%;
+    --hsl-slate-200: 214deg 32% 91%;
+    --hsl-slate-300: 213deg 27% 84%;
+    --hsl-slate-400: 215deg 20% 65%;
+    --hsl-slate-500: 215deg 16% 47%;
+    --hsl-slate-600: 215deg 19% 35%;
+    --hsl-slate-700: 215deg 25% 27%;
+    --hsl-slate-800: 217deg 33% 17%;
+    --hsl-slate-900: 222deg 47% 11%;
+    --hsl-slate-950: 229deg 84% 5%;
+
+    --color-rose-50: hsl(var(--hsl-rose-50));
+    --color-rose-100: hsl(var(--hsl-rose-100));
+    --color-rose-200: hsl(var(--hsl-rose-200));
+    --color-rose-300: hsl(var(--hsl-rose-300));
+    --color-rose-400: hsl(var(--hsl-rose-400));
+    --color-rose-500: hsl(var(--hsl-rose-500));
+    --color-rose-600: hsl(var(--hsl-rose-600));
+    --color-rose-700: hsl(var(--hsl-rose-700));
+    --color-rose-800: hsl(var(--hsl-rose-800));
+    --color-rose-900: hsl(var(--hsl-rose-900));
+    --color-rose-950: hsl(var(--hsl-rose-950));
+    --color-pink-50: hsl(var(--hsl-pink-50));
+    --color-pink-100: hsl(var(--hsl-pink-100));
+    --color-pink-200: hsl(var(--hsl-pink-200));
+    --color-pink-300: hsl(var(--hsl-pink-300));
+    --color-pink-400: hsl(var(--hsl-pink-400));
+    --color-pink-500: hsl(var(--hsl-pink-500));
+    --color-pink-600: hsl(var(--hsl-pink-600));
+    --color-pink-700: hsl(var(--hsl-pink-700));
+    --color-pink-800: hsl(var(--hsl-pink-800));
+    --color-pink-900: hsl(var(--hsl-pink-900));
+    --color-pink-950: hsl(var(--hsl-pink-950));
+    --color-fuchsia-50: hsl(var(--hsl-fuchsia-50));
+    --color-fuchsia-100: hsl(var(--hsl-fuchsia-100));
+    --color-fuchsia-200: hsl(var(--hsl-fuchsia-200));
+    --color-fuchsia-300: hsl(var(--hsl-fuchsia-300));
+    --color-fuchsia-400: hsl(var(--hsl-fuchsia-400));
+    --color-fuchsia-500: hsl(var(--hsl-fuchsia-500));
+    --color-fuchsia-600: hsl(var(--hsl-fuchsia-600));
+    --color-fuchsia-700: hsl(var(--hsl-fuchsia-700));
+    --color-fuchsia-800: hsl(var(--hsl-fuchsia-800));
+    --color-fuchsia-900: hsl(var(--hsl-fuchsia-900));
+    --color-fuchsia-950: hsl(var(--hsl-fuchsia-950));
+    --color-purple-50: hsl(var(--hsl-purple-50));
+    --color-purple-100: hsl(var(--hsl-purple-100));
+    --color-purple-200: hsl(var(--hsl-purple-200));
+    --color-purple-300: hsl(var(--hsl-purple-300));
+    --color-purple-400: hsl(var(--hsl-purple-400));
+    --color-purple-500: hsl(var(--hsl-purple-500));
+    --color-purple-600: hsl(var(--hsl-purple-600));
+    --color-purple-700: hsl(var(--hsl-purple-700));
+    --color-purple-800: hsl(var(--hsl-purple-800));
+    --color-purple-900: hsl(var(--hsl-purple-900));
+    --color-purple-950: hsl(var(--hsl-purple-950));
+    --color-violet-50: hsl(var(--hsl-violet-50));
+    --color-violet-100: hsl(var(--hsl-violet-100));
+    --color-violet-200: hsl(var(--hsl-violet-200));
+    --color-violet-300: hsl(var(--hsl-violet-300));
+    --color-violet-400: hsl(var(--hsl-violet-400));
+    --color-violet-500: hsl(var(--hsl-violet-500));
+    --color-violet-600: hsl(var(--hsl-violet-600));
+    --color-violet-700: hsl(var(--hsl-violet-700));
+    --color-violet-800: hsl(var(--hsl-violet-800));
+    --color-violet-900: hsl(var(--hsl-violet-900));
+    --color-violet-950: hsl(var(--hsl-violet-950));
+    --color-indigo-50: hsl(var(--hsl-indigo-50));
+    --color-indigo-100: hsl(var(--hsl-indigo-100));
+    --color-indigo-200: hsl(var(--hsl-indigo-200));
+    --color-indigo-300: hsl(var(--hsl-indigo-300));
+    --color-indigo-400: hsl(var(--hsl-indigo-400));
+    --color-indigo-500: hsl(var(--hsl-indigo-500));
+    --color-indigo-600: hsl(var(--hsl-indigo-600));
+    --color-indigo-700: hsl(var(--hsl-indigo-700));
+    --color-indigo-800: hsl(var(--hsl-indigo-800));
+    --color-indigo-900: hsl(var(--hsl-indigo-900));
+    --color-indigo-950: hsl(var(--hsl-indigo-950));
+    --color-blue-50: hsl(var(--hsl-blue-50));
+    --color-blue-100: hsl(var(--hsl-blue-100));
+    --color-blue-200: hsl(var(--hsl-blue-200));
+    --color-blue-300: hsl(var(--hsl-blue-300));
+    --color-blue-400: hsl(var(--hsl-blue-400));
+    --color-blue-500: hsl(var(--hsl-blue-500));
+    --color-blue-600: hsl(var(--hsl-blue-600));
+    --color-blue-700: hsl(var(--hsl-blue-700));
+    --color-blue-800: hsl(var(--hsl-blue-800));
+    --color-blue-900: hsl(var(--hsl-blue-900));
+    --color-blue-950: hsl(var(--hsl-blue-950));
+    --color-sky-50: hsl(var(--hsl-sky-50));
+    --color-sky-100: hsl(var(--hsl-sky-100));
+    --color-sky-200: hsl(var(--hsl-sky-200));
+    --color-sky-300: hsl(var(--hsl-sky-300));
+    --color-sky-400: hsl(var(--hsl-sky-400));
+    --color-sky-500: hsl(var(--hsl-sky-500));
+    --color-sky-600: hsl(var(--hsl-sky-600));
+    --color-sky-700: hsl(var(--hsl-sky-700));
+    --color-sky-800: hsl(var(--hsl-sky-800));
+    --color-sky-900: hsl(var(--hsl-sky-900));
+    --color-sky-950: hsl(var(--hsl-sky-950));
+    --color-cyan-50: hsl(var(--hsl-cyan-50));
+    --color-cyan-100: hsl(var(--hsl-cyan-100));
+    --color-cyan-200: hsl(var(--hsl-cyan-200));
+    --color-cyan-300: hsl(var(--hsl-cyan-300));
+    --color-cyan-400: hsl(var(--hsl-cyan-400));
+    --color-cyan-500: hsl(var(--hsl-cyan-500));
+    --color-cyan-600: hsl(var(--hsl-cyan-600));
+    --color-cyan-700: hsl(var(--hsl-cyan-700));
+    --color-cyan-800: hsl(var(--hsl-cyan-800));
+    --color-cyan-900: hsl(var(--hsl-cyan-900));
+    --color-cyan-950: hsl(var(--hsl-cyan-950));
+    --color-teal-50: hsl(var(--hsl-teal-50));
+    --color-teal-100: hsl(var(--hsl-teal-100));
+    --color-teal-200: hsl(var(--hsl-teal-200));
+    --color-teal-300: hsl(var(--hsl-teal-300));
+    --color-teal-400: hsl(var(--hsl-teal-400));
+    --color-teal-500: hsl(var(--hsl-teal-500));
+    --color-teal-600: hsl(var(--hsl-teal-600));
+    --color-teal-700: hsl(var(--hsl-teal-700));
+    --color-teal-800: hsl(var(--hsl-teal-800));
+    --color-teal-900: hsl(var(--hsl-teal-900));
+    --color-teal-950: hsl(var(--hsl-teal-950));
+    --color-emerald-50: hsl(var(--hsl-emerald-50));
+    --color-emerald-100: hsl(var(--hsl-emerald-100));
+    --color-emerald-200: hsl(var(--hsl-emerald-200));
+    --color-emerald-300: hsl(var(--hsl-emerald-300));
+    --color-emerald-400: hsl(var(--hsl-emerald-400));
+    --color-emerald-500: hsl(var(--hsl-emerald-500));
+    --color-emerald-600: hsl(var(--hsl-emerald-600));
+    --color-emerald-700: hsl(var(--hsl-emerald-700));
+    --color-emerald-800: hsl(var(--hsl-emerald-800));
+    --color-emerald-900: hsl(var(--hsl-emerald-900));
+    --color-emerald-950: hsl(var(--hsl-emerald-950));
+    --color-green-50: hsl(var(--hsl-green-50));
+    --color-green-100: hsl(var(--hsl-green-100));
+    --color-green-200: hsl(var(--hsl-green-200));
+    --color-green-300: hsl(var(--hsl-green-300));
+    --color-green-400: hsl(var(--hsl-green-400));
+    --color-green-500: hsl(var(--hsl-green-500));
+    --color-green-600: hsl(var(--hsl-green-600));
+    --color-green-700: hsl(var(--hsl-green-700));
+    --color-green-800: hsl(var(--hsl-green-800));
+    --color-green-900: hsl(var(--hsl-green-900));
+    --color-green-950: hsl(var(--hsl-green-950));
+    --color-lime-50: hsl(var(--hsl-lime-50));
+    --color-lime-100: hsl(var(--hsl-lime-100));
+    --color-lime-200: hsl(var(--hsl-lime-200));
+    --color-lime-300: hsl(var(--hsl-lime-300));
+    --color-lime-400: hsl(var(--hsl-lime-400));
+    --color-lime-500: hsl(var(--hsl-lime-500));
+    --color-lime-600: hsl(var(--hsl-lime-600));
+    --color-lime-700: hsl(var(--hsl-lime-700));
+    --color-lime-800: hsl(var(--hsl-lime-800));
+    --color-lime-900: hsl(var(--hsl-lime-900));
+    --color-lime-950: hsl(var(--hsl-lime-950));
+    --color-yellow-50: hsl(var(--hsl-yellow-50));
+    --color-yellow-100: hsl(var(--hsl-yellow-100));
+    --color-yellow-200: hsl(var(--hsl-yellow-200));
+    --color-yellow-300: hsl(var(--hsl-yellow-300));
+    --color-yellow-400: hsl(var(--hsl-yellow-400));
+    --color-yellow-500: hsl(var(--hsl-yellow-500));
+    --color-yellow-600: hsl(var(--hsl-yellow-600));
+    --color-yellow-700: hsl(var(--hsl-yellow-700));
+    --color-yellow-800: hsl(var(--hsl-yellow-800));
+    --color-yellow-900: hsl(var(--hsl-yellow-900));
+    --color-yellow-950: hsl(var(--hsl-yellow-950));
+    --color-amber-50: hsl(var(--hsl-amber-50));
+    --color-amber-100: hsl(var(--hsl-amber-100));
+    --color-amber-200: hsl(var(--hsl-amber-200));
+    --color-amber-300: hsl(var(--hsl-amber-300));
+    --color-amber-400: hsl(var(--hsl-amber-400));
+    --color-amber-500: hsl(var(--hsl-amber-500));
+    --color-amber-600: hsl(var(--hsl-amber-600));
+    --color-amber-700: hsl(var(--hsl-amber-700));
+    --color-amber-800: hsl(var(--hsl-amber-800));
+    --color-amber-900: hsl(var(--hsl-amber-900));
+    --color-amber-950: hsl(var(--hsl-amber-950));
+    --color-orange-50: hsl(var(--hsl-orange-50));
+    --color-orange-100: hsl(var(--hsl-orange-100));
+    --color-orange-200: hsl(var(--hsl-orange-200));
+    --color-orange-300: hsl(var(--hsl-orange-300));
+    --color-orange-400: hsl(var(--hsl-orange-400));
+    --color-orange-500: hsl(var(--hsl-orange-500));
+    --color-orange-600: hsl(var(--hsl-orange-600));
+    --color-orange-700: hsl(var(--hsl-orange-700));
+    --color-orange-800: hsl(var(--hsl-orange-800));
+    --color-orange-900: hsl(var(--hsl-orange-900));
+    --color-orange-950: hsl(var(--hsl-orange-950));
+    --color-red-50: hsl(var(--hsl-red-50));
+    --color-red-100: hsl(var(--hsl-red-100));
+    --color-red-200: hsl(var(--hsl-red-200));
+    --color-red-300: hsl(var(--hsl-red-300));
+    --color-red-400: hsl(var(--hsl-red-400));
+    --color-red-500: hsl(var(--hsl-red-500));
+    --color-red-600: hsl(var(--hsl-red-600));
+    --color-red-700: hsl(var(--hsl-red-700));
+    --color-red-800: hsl(var(--hsl-red-800));
+    --color-red-900: hsl(var(--hsl-red-900));
+    --color-red-950: hsl(var(--hsl-red-950));
+    --color-neutral-50: hsl(var(--hsl-neutral-50));
+    --color-neutral-100: hsl(var(--hsl-neutral-100));
+    --color-neutral-200: hsl(var(--hsl-neutral-200));
+    --color-neutral-300: hsl(var(--hsl-neutral-300));
+    --color-neutral-400: hsl(var(--hsl-neutral-400));
+    --color-neutral-500: hsl(var(--hsl-neutral-500));
+    --color-neutral-600: hsl(var(--hsl-neutral-600));
+    --color-neutral-700: hsl(var(--hsl-neutral-700));
+    --color-neutral-800: hsl(var(--hsl-neutral-800));
+    --color-neutral-900: hsl(var(--hsl-neutral-900));
+    --color-neutral-950: hsl(var(--hsl-neutral-950));
+    --color-stone-50: hsl(var(--hsl-stone-50));
+    --color-stone-100: hsl(var(--hsl-stone-100));
+    --color-stone-200: hsl(var(--hsl-stone-200));
+    --color-stone-300: hsl(var(--hsl-stone-300));
+    --color-stone-400: hsl(var(--hsl-stone-400));
+    --color-stone-500: hsl(var(--hsl-stone-500));
+    --color-stone-600: hsl(var(--hsl-stone-600));
+    --color-stone-700: hsl(var(--hsl-stone-700));
+    --color-stone-800: hsl(var(--hsl-stone-800));
+    --color-stone-900: hsl(var(--hsl-stone-900));
+    --color-stone-950: hsl(var(--hsl-stone-950));
+    --color-zinc-50: hsl(var(--hsl-zinc-50));
+    --color-zinc-100: hsl(var(--hsl-zinc-100));
+    --color-zinc-200: hsl(var(--hsl-zinc-200));
+    --color-zinc-300: hsl(var(--hsl-zinc-300));
+    --color-zinc-400: hsl(var(--hsl-zinc-400));
+    --color-zinc-500: hsl(var(--hsl-zinc-500));
+    --color-zinc-600: hsl(var(--hsl-zinc-600));
+    --color-zinc-700: hsl(var(--hsl-zinc-700));
+    --color-zinc-800: hsl(var(--hsl-zinc-800));
+    --color-zinc-900: hsl(var(--hsl-zinc-900));
+    --color-zinc-950: hsl(var(--hsl-zinc-950));
+    --color-gray-50: hsl(var(--hsl-gray-50));
+    --color-gray-100: hsl(var(--hsl-gray-100));
+    --color-gray-200: hsl(var(--hsl-gray-200));
+    --color-gray-300: hsl(var(--hsl-gray-300));
+    --color-gray-400: hsl(var(--hsl-gray-400));
+    --color-gray-500: hsl(var(--hsl-gray-500));
+    --color-gray-600: hsl(var(--hsl-gray-600));
+    --color-gray-700: hsl(var(--hsl-gray-700));
+    --color-gray-800: hsl(var(--hsl-gray-800));
+    --color-gray-900: hsl(var(--hsl-gray-900));
+    --color-gray-950: hsl(var(--hsl-gray-950));
+    --color-slate-50: hsl(var(--hsl-slate-50));
+    --color-slate-100: hsl(var(--hsl-slate-100));
+    --color-slate-200: hsl(var(--hsl-slate-200));
+    --color-slate-300: hsl(var(--hsl-slate-300));
+    --color-slate-400: hsl(var(--hsl-slate-400));
+    --color-slate-500: hsl(var(--hsl-slate-500));
+    --color-slate-600: hsl(var(--hsl-slate-600));
+    --color-slate-700: hsl(var(--hsl-slate-700));
+    --color-slate-800: hsl(var(--hsl-slate-800));
+    --color-slate-900: hsl(var(--hsl-slate-900));
+    --color-slate-950: hsl(var(--hsl-slate-950));
+  }
+
+
+/* ═══ syntax.css — editor + code block tokens ═══ */
+
+  /*
+   * Default syntax-theme variables, merged from the built-in light & dark
+   * syntax themes. Each value that differs between the two uses light-dark(),
+   * which resolves against the color-scheme that index.html sets on <body>
+   * (light by default; dark under body.dark-mode / [class*='dark-ui']). A
+   * selected syntax-theme package can still override any of these — its :root
+   * is unlayered and therefore outranks this @layer.
+   */
+  :root {
+    /**
+     * Primitive design tokens are defined in https://github.com/inkdropapp/css/blob/main/tokens.css
+     */
+
+    /**
+     * Editor UI colors
+     */
+    --editor-foreground-color: light-dark(var(--color-gray-800), var(--color-gray-300));
+    --editor-background-color: light-dark(var(--color-white), var(--color-neutral-950));
+    --editor-caret-color: light-dark(var(--color-violet-600), var(--color-violet-400));
+    --editor-selection-background: light-dark(
+      hsl(var(--hsl-violet-600) / 13%),
+      hsl(var(--hsl-violet-400) / 13%)
+    );
+    --editor-focused-selection-background: light-dark(
+      hsl(var(--hsl-violet-600) / 30%),
+      hsl(var(--hsl-violet-400) / 30%)
+    );
+    --editor-active-line-background-color: light-dark(
+      hsl(var(--hsl-blue-300) / 20%),
+      hsl(var(--hsl-gray-600) / 20%)
+    );
+    --editor-special-char-color: light-dark(var(--color-slate-400), var(--color-gray-600));
+    --editor-spelling-error-color: var(--negative-color);
+    --editor-gutter-border-right-color: light-dark(
+      hsl(var(--hsl-slate-200)),
+      hsl(var(--hsl-neutral-800))
+    );
+    --editor-gutter-border-right: 1px solid var(--editor-gutter-border-right-color);
+    --editor-gutter-color: light-dark(var(--color-slate-300), var(--color-gray-500));
+    --editor-gutter-background-color: transparent;
+    --editor-gutter-background-solid-color: light-dark(
+      hsl(var(--hsl-white)),
+      hsl(var(--hsl-neutral-900))
+    );
+    --editor-active-line-gutter-background-color: light-dark(
+      hsl(var(--hsl-blue-300) / 20%),
+      hsl(var(--hsl-gray-600) / 20%)
+    );
+    --editor-panel-background-color: light-dark(
+      hsl(var(--hsl-slate-50)),
+      hsl(var(--hsl-neutral-900))
+    );
+    --editor-panel-color: light-dark(var(--color-slate-600), var(--color-neutral-400));
+    --editor-panel-border-color: var(--border-color);
+    --editor-tooltip-border-style: solid;
+    --editor-tooltip-border-width: 1px;
+    --editor-tooltip-border-color: light-dark(hsl(var(--hsl-slate-200)), var(--color-gray-600));
+    --editor-tooltip-border-radius: 0.8em;
+    --editor-tooltip-background-color: light-dark(
+      hsl(var(--hsl-white)),
+      hsl(var(--hsl-neutral-900))
+    );
+    --editor-tooltip-box-shadow: var(--floating-shadow);
+    --editor-tooltip-autocomplete-padding: 0.2em;
+    --editor-tooltip-autocomplete-item-border-radius: 0.2em;
+    --editor-tooltip-autocomplete-item-padding: 0 0.8em;
+    --editor-tooltip-autocomplete-item-selected-background-color: light-dark(
+      hsl(var(--hsl-violet-100)),
+      var(--color-violet-900)
+    );
+    --editor-tooltip-autocomplete-section-border-color: light-dark(
+      var(--color-slate-500),
+      var(--color-neutral-500)
+    );
+    --editor-tooltip-autocomplete-item-selected-color: light-dark(
+      var(--color-gray-800),
+      var(--color-gray-200)
+    );
+    --editor-inline-tooltip-color: light-dark(
+      hsl(var(--hsl-slate-600)),
+      hsl(var(--hsl-neutral-400))
+    );
+    --editor-inline-tooltip-background-color: light-dark(
+      hsl(var(--hsl-white)),
+      hsl(var(--hsl-neutral-900) / 40%)
+    );
+    --editor-inline-tooltip-outline: 1px solid
+      light-dark(hsl(var(--hsl-slate-200)), var(--color-gray-600));
+    --editor-completion-label: light-dark(var(--color-slate-600), var(--color-neutral-400));
+    --editor-completion-matched-text-color: light-dark(
+      var(--color-blue-600),
+      var(--color-blue-400)
+    );
+    --editor-completion-matched-text-decoration: none;
+    --editor-completion-matched-text-font-style: normal;
+    --editor-completion-matched-text-font-weight: bold;
+    --editor-completion-detail-color: light-dark(var(--color-slate-500), var(--color-pink-300));
+    --editor-completion-detail-text-decoration: none;
+    --editor-completion-detail-font-style: normal;
+    --editor-completion-detail-font-weight: normal;
+    --editor-matching-bracket-outline: 1px solid
+      light-dark(var(--color-slate-300), var(--color-gray-600));
+    --editor-matching-bracket-background-color: transparent;
+    --editor-nonmatching-bracket-outline: 1px solid
+      light-dark(var(--color-slate-600), var(--color-gray-600));
+    --editor-nonmatching-bracket-background-color: transparent;
+    --editor-selection-match-background-color: light-dark(
+      hsl(var(--hsl-slate-100)),
+      hsl(var(--hsl-gray-700))
+    );
+    --editor-selection-match-outline: none;
+    --editor-search-match-background-color: hsl(var(--hsl-amber-500) / 25%);
+    --editor-search-match-outline: none;
+    --editor-search-match-selected-background-color: hsl(var(--hsl-amber-500) / 50%);
+    --editor-search-match-selected-outline: 1px solid var(--color-amber-500);
+    --editor-placeholder-color: light-dark(
+      hsl(var(--hsl-slate-900) / 20%),
+      hsl(var(--hsl-gray-100) / 20%)
+    );
+    --editor-nes-ghost-color: light-dark(var(--color-slate-300), var(--color-gray-500));
+    --editor-highlight-space-color: light-dark(hsl(var(--hsl-slate-100)), hsl(var(--hsl-gray-700)));
+    --editor-highlight-tab-background-image: url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" width="200" height="20"><path stroke="%23888" stroke-width="1" fill="none" d="M1 10H196L190 5M190 15L196 10M197 4L197 16"/></svg>');
+    --editor-highlight-tab-filter: 'none';
+    --editor-highlight-tab-opacity: 0.3;
+    --editor-trailing-space-background-color: light-dark(
+      hsl(var(--hsl-red-200)),
+      var(--color-red-600)
+    );
+    --editor-fold-placeholder-border-radius: 0.2em;
+    --editor-fold-placeholder-color: light-dark(var(--color-white), var(--color-neutral-950));
+    --editor-fold-placeholder-border: 1px solid
+      light-dark(var(--color-slate-400), var(--color-neutral-400));
+    --editor-fold-placeholder-background-color: light-dark(
+      var(--color-slate-400),
+      var(--color-neutral-400)
+    );
+    --editor-image-widget-backdrop-background-color: light-dark(
+      hsl(var(--hsl-slate-100)),
+      hsl(var(--hsl-neutral-600) / 20%)
+    );
+    --editor-image-widget-backdrop-border: 1px solid
+      light-dark(hsl(var(--hsl-slate-200)), hsl(var(--hsl-gray-700) / 50%));
+
+    /**
+     * Syntax Tokens
+     */
+
+    /* Comments */
+    --syntax-comment-color: light-dark(var(--color-slate-400), var(--color-gray-400));
+    --syntax-comment-font-style: italic;
+    --syntax-line-comment-color: var(--syntax-comment-color);
+    --syntax-line-comment-font-style: var(--syntax-comment-font-style);
+    --syntax-block-comment-color: var(--syntax-comment-color);
+    --syntax-block-comment-font-style: var(--syntax-comment-font-style);
+    --syntax-doc-comment-color: var(--syntax-comment-color);
+    --syntax-doc-comment-font-style: var(--syntax-comment-font-style);
+
+    /* Names */
+    --syntax-name-color: var(--editor-foreground-color);
+    --syntax-name-constant-color: light-dark(var(--color-blue-600), var(--color-blue-400));
+    --syntax-name-standard-color: light-dark(var(--color-pink-600), var(--color-pink-400));
+    --syntax-name-definition-color: light-dark(var(--color-pink-600), var(--color-pink-400));
+    --syntax-name-function-color: light-dark(var(--color-cyan-600), var(--color-cyan-300));
+    --syntax-name-special-color: var(--syntax-name-color);
+    --syntax-name-local-color: var(--syntax-name-color);
+
+    /* Variable names */
+    --syntax-variable-name-color: var(--editor-foreground-color);
+    --syntax-variable-name-constant-color: light-dark(var(--color-blue-600), var(--color-blue-400));
+    --syntax-variable-name-standard-color: light-dark(var(--color-pink-600), var(--color-pink-400));
+    --syntax-variable-name-definition-color: var(--syntax-variable-name-color);
+    --syntax-variable-name-function-color: light-dark(var(--color-cyan-600), var(--color-cyan-300));
+    --syntax-variable-name-special-color: var(--syntax-variable-name-color);
+    --syntax-variable-name-local-color: var(--syntax-variable-name-color);
+
+    /* Property names */
+    --syntax-property-name-color: var(--editor-foreground-color);
+    --syntax-property-name-constant-color: light-dark(var(--color-blue-600), var(--color-blue-400));
+    --syntax-property-name-standard-color: light-dark(var(--color-pink-600), var(--color-pink-400));
+    --syntax-property-name-definition-color: var(--syntax-property-name-color);
+    --syntax-property-name-function-color: light-dark(var(--color-cyan-600), var(--color-cyan-300));
+    --syntax-property-name-special-color: var(--syntax-property-name-color);
+    --syntax-property-name-local-color: var(--syntax-property-name-color);
+
+    /* Other names */
+    --syntax-tag-name-color: light-dark(var(--color-blue-600), var(--color-blue-400));
+    --syntax-attribute-name-color: light-dark(var(--color-cyan-600), var(--color-cyan-300));
+    --syntax-class-name-color: light-dark(var(--color-pink-600), var(--color-pink-400));
+    --syntax-label-name-color: light-dark(var(--color-pink-600), var(--color-pink-400));
+    --syntax-namespace-color: light-dark(var(--color-pink-600), var(--color-pink-400));
+    --syntax-macro-name-color: light-dark(var(--color-cyan-600), var(--color-cyan-300));
+
+    /* Strings */
+    --syntax-string-color: light-dark(var(--color-green-600), var(--color-emerald-400));
+    --syntax-string-special-color: var(--syntax-string-color);
+    --syntax-string-constant-color: var(--syntax-string-color);
+    --syntax-string-standard-color: var(--syntax-string-color);
+
+    /* Numbers & literals */
+    --syntax-number-color: light-dark(var(--color-blue-600), var(--color-blue-400));
+    --syntax-literal-color: light-dark(var(--color-blue-600), var(--color-blue-400));
+    --syntax-character-color: light-dark(var(--color-blue-600), var(--color-blue-400));
+    --syntax-integer-color: light-dark(var(--color-blue-600), var(--color-blue-400));
+    --syntax-float-color: light-dark(var(--color-blue-600), var(--color-blue-400));
+    --syntax-bool-color: light-dark(var(--color-blue-600), var(--color-blue-400));
+    --syntax-regexp-color: light-dark(var(--color-green-600), var(--color-emerald-400));
+    --syntax-color-color: light-dark(var(--color-blue-600), var(--color-blue-400));
+    --syntax-url-color: light-dark(var(--color-teal-600), var(--color-teal-500));
+    --syntax-attribute-value-color: light-dark(var(--color-green-600), var(--color-emerald-400));
+
+    /* Keywords */
+    --syntax-self-color: var(--editor-foreground-color);
+    --syntax-null-color: light-dark(var(--color-blue-600), var(--color-blue-400));
+    --syntax-atom-color: light-dark(var(--color-blue-600), var(--color-blue-400));
+    --syntax-unit-color: light-dark(var(--color-blue-600), var(--color-blue-400));
+    --syntax-modifier-color: light-dark(var(--color-blue-600), var(--color-blue-400));
+    --syntax-operator-keyword-color: light-dark(var(--color-violet-600), var(--color-violet-400));
+    --syntax-control-keyword-color: light-dark(var(--color-violet-600), var(--color-violet-400));
+    --syntax-definition-keyword-color: light-dark(var(--color-blue-600), var(--color-blue-400));
+    --syntax-module-keyword-color: light-dark(var(--color-violet-600), var(--color-violet-400));
+    --syntax-keyword-color: light-dark(var(--color-violet-600), var(--color-violet-400));
+
+    /* Operators */
+    --syntax-operator-color: light-dark(var(--color-violet-600), var(--color-violet-400));
+    --syntax-deref-operator-color: var(--syntax-operator-color);
+    --syntax-arithmetic-operator-color: var(--syntax-operator-color);
+    --syntax-logic-operator-color: var(--syntax-operator-color);
+    --syntax-bitwise-operator-color: var(--syntax-operator-color);
+    --syntax-compare-operator-color: var(--syntax-operator-color);
+    --syntax-update-operator-color: var(--syntax-operator-color);
+    --syntax-definition-operator-color: var(--syntax-operator-color);
+    --syntax-type-operator-color: var(--editor-foreground-color);
+    --syntax-control-operator-color: var(--syntax-operator-color);
+
+    /* Punctuation */
+    --syntax-separator-color: light-dark(var(--color-blue-600), var(--color-blue-400));
+    --syntax-angle-bracket-color: light-dark(var(--color-blue-600), var(--color-blue-400));
+    --syntax-square-bracket-color: light-dark(var(--color-blue-600), var(--color-blue-400));
+    --syntax-paren-color: light-dark(var(--color-blue-600), var(--color-blue-400));
+    --syntax-brace-color: light-dark(var(--color-blue-600), var(--color-blue-400));
+    --syntax-bracket-color: light-dark(var(--color-blue-600), var(--color-blue-400));
+    --syntax-punctuation-color: light-dark(var(--color-blue-600), var(--color-blue-400));
+
+    /* Headings & prose */
+    --syntax-heading-color: light-dark(var(--color-pink-600), var(--color-pink-400));
+    --syntax-heading-font-weight: bold;
+    --syntax-heading-1-color: var(--syntax-heading-color);
+    --syntax-heading-1-font-weight: var(--syntax-heading-font-weight);
+    --syntax-heading-2-color: var(--syntax-heading-color);
+    --syntax-heading-2-font-weight: var(--syntax-heading-font-weight);
+    --syntax-heading-3-color: var(--syntax-heading-color);
+    --syntax-heading-3-font-weight: var(--syntax-heading-font-weight);
+    --syntax-heading-4-color: var(--syntax-heading-color);
+    --syntax-heading-4-font-weight: var(--syntax-heading-font-weight);
+    --syntax-heading-5-color: var(--syntax-heading-color);
+    --syntax-heading-5-font-weight: var(--syntax-heading-font-weight);
+    --syntax-heading-6-color: var(--syntax-heading-color);
+    --syntax-heading-6-font-weight: var(--syntax-heading-font-weight);
+    --syntax-content-separator-color: light-dark(var(--color-pink-600), var(--color-pink-400));
+    --syntax-content-separator-font-weight: bold;
+    --syntax-list-color: var(--editor-foreground-color);
+    --syntax-quote-color: light-dark(var(--color-slate-600), var(--color-gray-400));
+    --syntax-quote-font-style: italic;
+    --syntax-emphasis-color: var(--editor-foreground-color);
+    --syntax-emphasis-font-style: italic;
+    --syntax-strong-color: var(--editor-foreground-color);
+    --syntax-strong-font-weight: bold;
+    --syntax-link-color: light-dark(var(--color-teal-600), var(--color-teal-500));
+    --syntax-link-text-decoration: underline;
+    --syntax-strikethrough-text-decoration: line-through;
+    --syntax-monospace-color: var(--editor-foreground-color);
+    --syntax-content-color: var(--editor-foreground-color);
+
+    /* Diffs & meta */
+    --syntax-inserted-color: light-dark(var(--color-green-600), var(--color-emerald-400));
+    --syntax-deleted-color: var(--color-red-500);
+    --syntax-changed-color: var(--color-amber-500);
+    --syntax-document-meta-color: var(--editor-foreground-color);
+    --syntax-annotation-color: light-dark(var(--color-cyan-600), var(--color-cyan-300));
+    --syntax-processing-instruction-color: light-dark(var(--color-blue-600), var(--color-blue-400));
+    --syntax-meta-color: light-dark(var(--color-slate-400), var(--color-gray-400));
+
+    /* Diagnostics */
+    --syntax-invalid-color: var(--color-red-500);
+    --syntax-invalid-border-bottom: 1px dotted var(--syntax-invalid-color);
+
+    /**
+     * Markdown-specific tokens
+     */
+    --md-inline-code-padding: 1px;
+    --md-inline-code-border-color: light-dark(
+      hsl(var(--hsl-slate-300) / 50%),
+      hsl(var(--hsl-blue-200) / 10%)
+    );
+    --md-inline-code-border-width: 1px;
+    --md-inline-code-background-color: light-dark(
+      hsl(var(--hsl-slate-200) / 10%),
+      hsl(var(--hsl-neutral-600) / 20%)
+    );
+    --md-codeblock-color: var(--editor-foreground-color);
+    --md-codeblock-border-color: light-dark(
+      hsl(var(--hsl-slate-300) / 50%),
+      hsl(var(--hsl-blue-200) / 10%)
+    );
+    --md-codeblock-border-width: 1px;
+    --md-codeblock-background-color: light-dark(
+      hsl(var(--hsl-slate-200) / 10%),
+      hsl(var(--hsl-neutral-700) / 20%)
+    );
+
+    --md-inline-mark-text-color: var(--editor-foreground-color);
+    --md-inline-mark-background-color: hsl(var(--hsl-yellow-500) / 30%);
+    --md-inline-mark-underline-color: hsl(var(--hsl-yellow-500));
+
+    --md-table-border-color: light-dark(
+      hsl(var(--hsl-slate-300) / 50%),
+      hsl(var(--hsl-blue-200) / 10%)
+    );
+    --md-table-border-width: 1px;
+    --md-table-background-color: light-dark(
+      hsl(var(--hsl-slate-200) / 10%),
+      hsl(var(--hsl-neutral-700) / 20%)
+    );
+
+    --md-blockquote-border-color: light-dark(var(--color-slate-400), var(--color-neutral-500));
+    --md-list-mark-color: var(--color-indigo-500);
+    --md-list-mark-2-color: var(--color-orange-500);
+    --md-list-mark-3-color: var(--color-emerald-500);
+    --md-task-marker-font-weight: bold;
+  }
+
+  /*
+   * Syntax-token colors for the CodeMirror editor and the rendered Markdown
+   * preview's code blocks. These rules map the token classes produced by
+   * tokenHighlighter (@inkdropapp/cm6-theme-common) to the --syntax-*
+   * variables that each syntax theme defines, so themes only supply values.
+   */
+  .cm-editor,
+  .mde-preview .codeblock {
+    :not([class^='md-alert']) {
+      .tok-quote:not(.md-alert) {
+        font-style: var(--syntax-quote-font-style, italic);
+        &.tok-content {
+          color: var(--syntax-quote-color);
+        }
+      }
+    }
+    .tok-list {
+      color: var(--syntax-list-color);
+    }
+    /* Comments ----------------------------------------------------------- */
+    .tok-comment {
+      color: var(--syntax-comment-color);
+      font-style: var(--syntax-comment-font-style, italic);
+    }
+    .tok-line-comment {
+      color: var(--syntax-line-comment-color);
+      font-style: var(--syntax-line-comment-font-style, italic);
+    }
+    .tok-block-comment {
+      color: var(--syntax-block-comment-color);
+      font-style: var(--syntax-block-comment-font-style, italic);
+    }
+    .tok-doc-comment {
+      color: var(--syntax-doc-comment-color);
+      font-style: var(--syntax-doc-comment-font-style, italic);
+    }
+    /* Names -------------------------------------------------------------- */
+    .tok-name {
+      color: var(--syntax-name-color);
+    }
+    .tok-name.tok-constant {
+      color: var(--syntax-name-constant-color);
+    }
+    .tok-name.tok-standard {
+      color: var(--syntax-name-standard-color);
+    }
+    .tok-name.tok-definition {
+      color: var(--syntax-name-definition-color);
+    }
+    .tok-name.tok-function {
+      color: var(--syntax-name-function-color);
+    }
+    .tok-name.tok-special {
+      color: var(--syntax-name-special-color);
+    }
+    .tok-name.tok-local {
+      color: var(--syntax-name-local-color);
+    }
+    /* Variable names ----------------------------------------------------- */
+    .tok-variable-name {
+      color: var(--syntax-variable-name-color);
+    }
+    .tok-variable-name.tok-constant {
+      color: var(--syntax-variable-name-constant-color);
+    }
+    .tok-variable-name.tok-standard {
+      color: var(--syntax-variable-name-standard-color);
+    }
+    .tok-variable-name.tok-definition {
+      color: var(--syntax-variable-name-definition-color);
+    }
+    .tok-variable-name.tok-function {
+      color: var(--syntax-variable-name-function-color);
+    }
+    .tok-variable-name.tok-special {
+      color: var(--syntax-variable-name-special-color);
+    }
+    .tok-variable-name.tok-local {
+      color: var(--syntax-variable-name-local-color);
+    }
+    /* Property names ----------------------------------------------------- */
+    .tok-property-name {
+      color: var(--syntax-property-name-color);
+    }
+    .tok-property-name.tok-constant {
+      color: var(--syntax-property-name-constant-color);
+    }
+    .tok-property-name.tok-standard {
+      color: var(--syntax-property-name-standard-color);
+    }
+    .tok-property-name.tok-definition {
+      color: var(--syntax-property-name-definition-color);
+    }
+    .tok-property-name.tok-function {
+      color: var(--syntax-property-name-function-color);
+    }
+    .tok-property-name.tok-special {
+      color: var(--syntax-property-name-special-color);
+    }
+    .tok-property-name.tok-local {
+      color: var(--syntax-property-name-local-color);
+    }
+    /* Other names -------------------------------------------------------- */
+    .tok-tag-name {
+      color: var(--syntax-tag-name-color);
+    }
+    .tok-attribute-name {
+      color: var(--syntax-attribute-name-color);
+    }
+    .tok-class-name {
+      color: var(--syntax-class-name-color);
+    }
+    /* legacy alias — t.typeName is not mapped by the current tokenHighlighter */
+    .tok-type-name {
+      color: var(--syntax-class-name-color);
+    }
+    .tok-label-name {
+      color: var(--syntax-label-name-color);
+    }
+    .tok-namespace {
+      color: var(--syntax-namespace-color);
+    }
+    .tok-macro-name {
+      color: var(--syntax-macro-name-color);
+    }
+    /* Strings ------------------------------------------------------------ */
+    .tok-string {
+      color: var(--syntax-string-color);
+    }
+    .tok-string.tok-special {
+      color: var(--syntax-string-special-color);
+    }
+    .tok-string.tok-constant {
+      color: var(--syntax-string-constant-color);
+    }
+    .tok-string.tok-standard {
+      color: var(--syntax-string-standard-color);
+    }
+    /* legacy alias — not produced by the current tokenHighlighter */
+    .tok-escape {
+      color: var(--syntax-string-special-color);
+    }
+    /* Numbers & literals ------------------------------------------------- */
+    .tok-number {
+      color: var(--syntax-number-color);
+    }
+    .tok-literal {
+      color: var(--syntax-literal-color);
+    }
+    .tok-character {
+      color: var(--syntax-character-color);
+    }
+    .tok-integer {
+      color: var(--syntax-integer-color);
+    }
+    .tok-float {
+      color: var(--syntax-float-color);
+    }
+    .tok-bool {
+      color: var(--syntax-bool-color);
+    }
+    .tok-regexp {
+      color: var(--syntax-regexp-color);
+    }
+    .tok-color {
+      color: var(--syntax-color-color);
+    }
+    .tok-url {
+      color: var(--syntax-url-color);
+    }
+    .tok-attribute-value {
+      color: var(--syntax-attribute-value-color);
+    }
+    /* Keywords ----------------------------------------------------------- */
+    .tok-self {
+      color: var(--syntax-self-color);
+    }
+    .tok-null {
+      color: var(--syntax-null-color);
+    }
+    .tok-atom {
+      color: var(--syntax-atom-color);
+    }
+    .tok-unit {
+      color: var(--syntax-unit-color);
+    }
+    .tok-modifier {
+      color: var(--syntax-modifier-color);
+    }
+    .tok-operator-keyword {
+      color: var(--syntax-operator-keyword-color);
+    }
+    .tok-control-keyword {
+      color: var(--syntax-control-keyword-color);
+    }
+    .tok-definition-keyword {
+      color: var(--syntax-definition-keyword-color);
+    }
+    .tok-module-keyword {
+      color: var(--syntax-module-keyword-color);
+    }
+    .tok-keyword {
+      color: var(--syntax-keyword-color);
+    }
+    /* Operators ---------------------------------------------------------- */
+    .tok-operator {
+      color: var(--syntax-operator-color);
+    }
+    .tok-deref-operator {
+      color: var(--syntax-deref-operator-color);
+    }
+    .tok-arithmetic-operator {
+      color: var(--syntax-arithmetic-operator-color);
+    }
+    .tok-logic-operator {
+      color: var(--syntax-logic-operator-color);
+    }
+    .tok-bitwise-operator {
+      color: var(--syntax-bitwise-operator-color);
+    }
+    .tok-compare-operator {
+      color: var(--syntax-compare-operator-color);
+    }
+    .tok-update-operator {
+      color: var(--syntax-update-operator-color);
+    }
+    .tok-definition-operator {
+      color: var(--syntax-definition-operator-color);
+    }
+    .tok-type-operator {
+      color: var(--syntax-type-operator-color);
+    }
+    .tok-control-operator {
+      color: var(--syntax-control-operator-color);
+    }
+    /* Punctuation -------------------------------------------------------- */
+    .tok-separator {
+      color: var(--syntax-separator-color);
+    }
+    .tok-angle-bracket {
+      color: var(--syntax-angle-bracket-color);
+    }
+    .tok-square-bracket {
+      color: var(--syntax-square-bracket-color);
+    }
+    .tok-paren {
+      color: var(--syntax-paren-color);
+    }
+    .tok-brace {
+      color: var(--syntax-brace-color);
+    }
+    .tok-bracket {
+      color: var(--syntax-bracket-color);
+    }
+    .tok-punctuation {
+      color: var(--syntax-punctuation-color);
+    }
+    /* Headings ----------------------------------------------------------- */
+    .tok-heading {
+      color: var(--syntax-heading-color);
+      font-weight: var(--syntax-heading-font-weight, bold);
+    }
+    .tok-heading-1 {
+      color: var(--syntax-heading-1-color);
+      font-weight: var(--syntax-heading-1-font-weight, bold);
+    }
+    .tok-heading-2 {
+      color: var(--syntax-heading-2-color);
+      font-weight: var(--syntax-heading-2-font-weight, bold);
+    }
+    .tok-heading-3 {
+      color: var(--syntax-heading-3-color);
+      font-weight: var(--syntax-heading-3-font-weight, bold);
+    }
+    .tok-heading-4 {
+      color: var(--syntax-heading-4-color);
+      font-weight: var(--syntax-heading-4-font-weight, bold);
+    }
+    .tok-heading-5 {
+      color: var(--syntax-heading-5-color);
+      font-weight: var(--syntax-heading-5-font-weight, bold);
+    }
+    .tok-heading-6 {
+      color: var(--syntax-heading-6-color);
+      font-weight: var(--syntax-heading-6-font-weight, bold);
+    }
+    /* Prose content ------------------------------------------------------ */
+    .tok-content-separator {
+      color: var(--syntax-content-separator-color);
+      font-weight: var(--syntax-content-separator-font-weight);
+    }
+    .tok-emphasis {
+      color: var(--syntax-emphasis-color);
+      font-style: var(--syntax-emphasis-font-style, italic);
+    }
+    .tok-strong {
+      color: var(--syntax-strong-color);
+      font-weight: var(--syntax-strong-font-weight, bold);
+    }
+    .tok-link {
+      color: var(--syntax-link-color);
+      text-decoration: var(--syntax-link-text-decoration, underline);
+      text-underline-position: under;
+    }
+    /* a url that is also a link keeps the url color */
+    .tok-link.tok-url {
+      color: var(--syntax-url-color);
+    }
+    .tok-monospace {
+      color: var(--syntax-monospace-color);
+    }
+    .tok-strikethrough {
+      text-decoration: var(--syntax-strikethrough-text-decoration, line-through);
+    }
+    .tok-content {
+      color: var(--syntax-content-color);
+    }
+    /* Diffs & meta ------------------------------------------------------- */
+    .tok-inserted {
+      color: var(--syntax-inserted-color);
+    }
+    .tok-deleted {
+      color: var(--syntax-deleted-color);
+    }
+    .tok-changed {
+      color: var(--syntax-changed-color);
+    }
+    .tok-document-meta {
+      color: var(--syntax-document-meta-color);
+    }
+    .tok-annotation {
+      color: var(--syntax-annotation-color);
+    }
+    .tok-processing-instruction {
+      color: var(--syntax-processing-instruction-color);
+    }
+    .tok-meta {
+      color: var(--syntax-meta-color);
+    }
+    /* Diagnostics -------------------------------------------------------- */
+    .tok-invalid {
+      color: var(--syntax-invalid-color);
+      border-bottom: var(--syntax-invalid-border-bottom, 1px dotted var(--syntax-invalid-color));
+    }
+
+    /* Markdown-specific token marks (produced by mdTokenHighlighter) ----- */
+    .md-header-mark {
+    }
+    .md-hard-break {
+    }
+    .md-quote-mark.tok-quote {
+      color: var(--syntax-quote-color);
+    }
+    .md-list-mark {
+      color: var(--md-list-mark-color);
+    }
+    .md-list-mark-2 .md-list-mark {
+      color: var(--md-list-mark-2-color);
+    }
+    .md-list-mark-3 .md-list-mark {
+      color: var(--md-list-mark-3-color);
+    }
+    .md-link-mark {
+    }
+    .md-emphasis-mark {
+    }
+    .md-code-mark {
+    }
+    .md-table-delimiter {
+    }
+    .md-strikethrough-mark {
+    }
+    .md-inline-code {
+      padding: var(--md-inline-code-padding, 1px);
+      background-color: var(
+        --md-inline-code-background-color,
+        var(--md-codeblock-background-color)
+      );
+      outline: var(--md-inline-code-border-width, var(--md-codeblock-border-width)) solid
+        var(--md-inline-code-border-color, var(--md-codeblock-border-color));
+      border-radius: 0.4em;
+      line-height: calc(140% + 2px);
+    }
+    .md-table .md-inline-code {
+      --md-inline-code-padding: 0px;
+      border: none;
+    }
+    .md-inline-mark {
+      color: var(--md-inline-mark-text-color);
+      background-color: var(--md-inline-mark-background-color, #f0f00030);
+      text-decoration: underline var(--md-inline-mark-underline-color, yellow);
+      text-underline-offset: 0.2em;
+      text-decoration-thickness: 3px;
+      text-decoration-style: solid;
+      text-decoration-skip-ink: none;
+    }
+    .md-task-marker {
+      cursor: pointer;
+      font-weight: var(--md-task-marker-font-weight, normal);
+    }
+    .md-task-done-text {
+      text-decoration: var(--md-task-done-text-decoration, line-through);
+      text-decoration-color: var(
+        --md-task-done-text-decoration-color,
+        color-mix(in srgb, currentColor, transparent 40%)
+      );
+    }
+  }
+
+  :root:has(body.acrylic-window) {
+    --editor-background-color: transparent;
+  }
+
+
+/* ═══ markdown.css — preview typography ═══ */
+
+  :root {
+    --gfm-alert-note: var(--blue, hsl(var(--hsl-blue-500)));
+    --gfm-alert-tip: var(--green, hsl(var(--hsl-green-500)));
+    --gfm-alert-important: var(--purple, hsl(var(--hsl-purple-500)));
+    --gfm-alert-warning: var(--orange, hsl(var(--hsl-orange-500)));
+    --gfm-alert-caution: var(--red, hsl(var(--hsl-red-500)));
+
+    --mde-preview-line-height: 1.5;
+    --mde-preview-inline-mark-text-color: var(--text-color);
+    --mde-preview-inline-mark-background-color: hsl(var(--hsl-yellow-500) / 30%);
+    --mde-preview-inline-mark-underline-color: hsl(var(--hsl-yellow-500));
+
+    --mde-preview-inline-code-text-color: var(--text-color);
+    --mde-preview-inline-code-padding: 0.2em 0.4em;
+    --mde-preview-inline-code-font-size: 85%;
+    --mde-preview-inline-code-border-width: 0px;
+    --mde-preview-inline-code-border-color: var(--border-color);
+    --mde-preview-inline-code-background-color: light-dark(
+      var(--transparent-black),
+      var(--transparent-white)
+    );
+
+    /* Link */
+    --mde-preview-link-color: var(--link-color);
+
+    /* Input placeholder */
+    --mde-preview-input-placeholder-color: light-dark(
+      var(--light-text-color),
+      var(--dark-text-color)
+    );
+
+    /* Headings */
+    --mde-preview-heading-color: var(--text-color);
+    --mde-preview-heading-border-color: var(--border-color);
+    --mde-preview-heading-muted-text-color: var(--muted-text-color);
+    --mde-preview-h1-border-width: 2px;
+    --mde-preview-heading-border-width: 1px;
+
+    /* Strong / Emphasis */
+    --mde-preview-strong-color: var(--text-color);
+    --mde-preview-em-color: var(--text-color);
+
+    /* Horizontal rule */
+    --mde-preview-hr-border-color: var(--border-color);
+    --mde-preview-hr-background-color: var(--solid-border-color);
+
+    /* Blockquote */
+    --mde-preview-blockquote-text-color: var(--muted-text-color);
+    --mde-preview-blockquote-border-color: var(--solid-border-color);
+
+    /* Image */
+    --mde-preview-image-background-color: light-dark(
+      var(--strong-transparent-black),
+      var(--strong-transparent-white)
+    );
+
+    /* Keyboard key */
+    --mde-preview-kbd-text-color: var(--kbd-color);
+    --mde-preview-kbd-background-color: var(--kbd-background);
+    --mde-preview-kbd-border-color: var(--kbd-border-color);
+    --mde-preview-kbd-shadow-color: var(--mde-preview-kbd-border-color);
+
+    /* Table */
+    --mde-preview-table-head-text-color: var(--text-color);
+    --mde-preview-table-head-background-color: light-dark(
+      var(--strong-transparent-black),
+      var(--strong-transparent-white)
+    );
+    --mde-preview-table-border-color: var(--solid-border-color);
+    --mde-preview-table-row-background-color: light-dark(
+      var(--strong-transparent-black),
+      var(--strong-transparent-white)
+    );
+    --mde-preview-table-row-border-color: var(--border-color);
+    --mde-preview-table-row-stripe-background-color: light-dark(
+      var(--transparent-black),
+      var(--transparent-white)
+    );
+
+    /* Footnotes */
+    --mde-preview-footnote-text-color: var(--muted-text-color);
+    --mde-preview-footnote-border-color: var(--solid-border-color);
+    --mde-preview-footnote-highlight-border-color: var(--primary-color-active);
+
+    /* List markers */
+    --mde-preview-list-marker-color: var(--text-color);
+    --mde-preview-list-marker-2-color: var(--text-color);
+    --mde-preview-list-marker-3-color: var(--text-color);
+
+    /* Task list */
+    --mde-preview-task-list-checked-color: var(--muted-text-color);
+
+    /* Code block */
+    --mde-preview-codeblock-meta-font-size: 80%;
+    --mde-preview-codeblock-meta-text-color: var(--muted-text-color);
+    --mde-preview-codeblock-meta-background-color: light-dark(
+      var(--transparent-black),
+      var(--transparent-white)
+    );
+    --mde-preview-codeblock-text-color: var(--text-color);
+    --mde-preview-codeblock-background-color: light-dark(
+      hsl(var(--hsl-slate-200) / 10%),
+      hsl(var(--hsl-neutral-700) / 20%)
+    );
+    --mde-preview-codeblock-border-color: light-dark(
+      hsl(var(--hsl-slate-300) / 50%),
+      hsl(var(--hsl-blue-200) / 10%)
+    );
+  }
+
+  .mde-preview {
+    -ms-text-size-adjust: 100%;
+    -webkit-text-size-adjust: 100%;
+    text-size-adjust: 100%;
+    margin: 0;
+    color: var(--text-color);
+    /* font-family: */
+    /*   "Helvetica Neue", Helvetica, "Segoe UI", Arial, freesans, sans-serif, */
+    /*   "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol"; */
+    /* font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Noto Sans', */
+    /*   Helvetica, Arial, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji'; */
+    font-size: 16px;
+    line-height: var(--mde-preview-line-height);
+    word-wrap: break-word;
+
+    .metadata + h1,
+    .metadata + h2,
+    .metadata + h3,
+    .metadata + h4,
+    .metadata + h5,
+    .metadata + h6 {
+      padding-top: 0;
+      margin-top: 0;
+    }
+
+    details,
+    figcaption,
+    figure {
+      display: block;
+    }
+
+    summary {
+      display: list-item;
+    }
+
+    iframe {
+      border: none;
+      width: 100%;
+      height: clamp(320px, 50vh, 640px);
+    }
+
+    [hidden] {
+      display: none !important;
+    }
+
+    a {
+      background-color: transparent;
+      color: var(--mde-preview-link-color);
+      text-decoration: none;
+    }
+
+    abbr[title] {
+      border-bottom: none;
+      text-decoration: underline dotted;
+    }
+
+    b,
+    strong {
+      font-weight: var(--font-weights-bold, 600);
+      color: var(--mde-preview-strong-color);
+    }
+
+    em {
+      color: var(--mde-preview-em-color);
+    }
+
+    dfn {
+      font-style: italic;
+    }
+
+    h1 {
+      margin: 0.67em 0;
+      font-weight: var(--font-weights-bold, 600);
+      padding-bottom: 0.3em;
+      font-size: var(--h1);
+      border-bottom: var(--mde-preview-h1-border-width) solid
+        var(--mde-preview-heading-border-color);
+    }
+
+    mark {
+      color: var(--mde-preview-inline-mark-text-color, currentColor);
+      background-color: var(--mde-preview-inline-mark-background-color);
+      text-decoration: underline var(--mde-preview-inline-mark-underline-color);
+      text-underline-offset: 3px;
+      text-decoration-thickness: 3px;
+      text-decoration-style: solid;
+      text-decoration-skip-ink: none;
+    }
+
+    small {
+      font-size: 90%;
+    }
+
+    sub,
+    sup {
+      font-size: 75%;
+      line-height: 0;
+      position: relative;
+      vertical-align: baseline;
+    }
+
+    sub {
+      bottom: -0.25em;
+    }
+
+    sup {
+      top: -0.5em;
+    }
+
+    img {
+      border-style: none;
+      max-width: 100%;
+      box-sizing: content-box;
+      background-color: var(--mde-preview-image-background-color);
+    }
+
+    code,
+    kbd,
+    pre,
+    samp {
+      font-family: monospace;
+      font-size: 1em;
+    }
+
+    figure {
+      margin: 1em 40px;
+    }
+
+    hr {
+      box-sizing: content-box;
+      overflow: hidden;
+      background: transparent;
+      border-bottom: 1px solid var(--mde-preview-hr-border-color);
+      height: 0.25em;
+      padding: 0;
+      margin: 24px 0;
+      background-color: var(--mde-preview-hr-background-color);
+      border: 0;
+    }
+
+    input {
+      font: inherit;
+      margin: 0;
+      overflow: visible;
+      font-family: inherit;
+      font-size: inherit;
+      line-height: inherit;
+    }
+
+    [type='button'],
+    [type='reset'],
+    [type='submit'] {
+      -webkit-appearance: button;
+      appearance: button;
+    }
+
+    [type='checkbox'],
+    [type='radio'] {
+      box-sizing: border-box;
+      padding: 0;
+    }
+
+    [type='number']::-webkit-inner-spin-button,
+    [type='number']::-webkit-outer-spin-button {
+      height: auto;
+    }
+
+    [type='search']::-webkit-search-cancel-button,
+    [type='search']::-webkit-search-decoration {
+      -webkit-appearance: none;
+      appearance: none;
+    }
+
+    ::-webkit-input-placeholder {
+      color: inherit;
+      opacity: 0.54;
+    }
+
+    ::-webkit-file-upload-button {
+      -webkit-appearance: button;
+      appearance: button;
+      font: inherit;
+    }
+
+    a:hover {
+      text-decoration: underline;
+    }
+
+    ::placeholder {
+      color: var(--mde-preview-input-placeholder-color);
+      opacity: 1;
+    }
+
+    hr::before {
+      display: table;
+      content: '';
+    }
+
+    hr::after {
+      display: table;
+      clear: both;
+      content: '';
+    }
+
+    pre {
+      overflow: auto;
+    }
+
+    table {
+      border-spacing: 0;
+      border-collapse: collapse;
+      display: block;
+      width: max-content;
+      max-width: 100%;
+      overflow: auto;
+    }
+
+    td,
+    th {
+      padding: 0;
+    }
+
+    details summary {
+      cursor: pointer;
+    }
+
+    details:not([open]) > *:not(summary) {
+      display: none !important;
+    }
+
+    kbd {
+      display: inline-block;
+      padding: 4px 5px;
+      font:
+        11px ui-monospace,
+        SFMono-Regular,
+        SF Mono,
+        Menlo,
+        Consolas,
+        Liberation Mono,
+        monospace;
+      line-height: 1;
+      color: var(--mde-preview-kbd-text-color);
+      vertical-align: middle;
+      background-color: var(--mde-preview-kbd-background-color);
+      border: solid 1px var(--mde-preview-kbd-border-color);
+      border-bottom-color: var(--mde-preview-kbd-border-color);
+      border-radius: 6px;
+      box-shadow: inset 0 -1px 0 var(--mde-preview-kbd-shadow-color);
+    }
+
+    h1,
+    h2,
+    h3,
+    h4,
+    h5,
+    h6 {
+      margin-top: 24px;
+      margin-bottom: 16px;
+      font-weight: var(--font-weights-bold, 600);
+      line-height: 1.25;
+      color: var(--mde-preview-heading-color);
+    }
+
+    h2 {
+      font-weight: var(--font-weights-bold, 600);
+      padding-bottom: 0.3em;
+      font-size: var(--h2);
+      border-bottom: var(--mde-preview-heading-border-width) solid
+        var(--mde-preview-heading-border-color);
+    }
+
+    h3 {
+      font-weight: var(--font-weights-bold, 600);
+      font-size: var(--h3);
+    }
+
+    h4 {
+      font-weight: var(--font-weights-bold, 600);
+      font-size: var(--h4);
+    }
+
+    h5 {
+      font-weight: var(--font-weights-bold, 600);
+      font-size: var(--h5);
+    }
+
+    h6 {
+      font-weight: var(--font-weights-bold, 600);
+      font-size: var(--h6);
+      color: var(--mde-preview-heading-muted-text-color);
+    }
+
+    p {
+      margin-top: 0;
+      margin-bottom: 10px;
+    }
+
+    blockquote {
+      margin: 0;
+      padding: 0 1em;
+      color: var(--mde-preview-blockquote-text-color);
+      border-left: 0.25em solid var(--mde-preview-blockquote-border-color);
+    }
+
+    ul,
+    ol {
+      margin-top: 0;
+      margin-bottom: 0;
+      padding-left: 2em;
+    }
+
+    ul {
+      list-style-type: disc;
+    }
+
+    ol ol,
+    ul ol {
+      list-style-type: lower-roman;
+    }
+
+    ul ul ol,
+    ul ol ol,
+    ol ul ol,
+    ol ol ol {
+      list-style-type: lower-alpha;
+    }
+
+    li::marker {
+      color: var(--mde-preview-list-marker-color);
+    }
+    li li::marker {
+      color: var(--mde-preview-list-marker-2-color);
+    }
+    li li li::marker {
+      color: var(--mde-preview-list-marker-3-color);
+    }
+    li li li li::marker {
+      color: var(--mde-preview-list-marker-color);
+    }
+    li li li li li::marker {
+      color: var(--mde-preview-list-marker-2-color);
+    }
+    li li li li li li::marker {
+      color: var(--mde-preview-list-marker-3-color);
+    }
+    li li li li li li li::marker {
+      color: var(--mde-preview-list-marker-color);
+    }
+    li li li li li li li li::marker {
+      color: var(--mde-preview-list-marker-2-color);
+    }
+    li li li li li li li li li::marker {
+      color: var(--mde-preview-list-marker-3-color);
+    }
+
+    dd {
+      margin-left: 0;
+    }
+
+    tt,
+    code,
+    samp {
+      font-family:
+        ui-monospace,
+        SFMono-Regular,
+        SF Mono,
+        Menlo,
+        Consolas,
+        Liberation Mono,
+        monospace;
+      font-size: 12px;
+    }
+
+    pre {
+      margin-top: 0;
+      margin-bottom: 0;
+      font-family:
+        ui-monospace,
+        SFMono-Regular,
+        SF Mono,
+        Menlo,
+        Consolas,
+        Liberation Mono,
+        monospace;
+      font-size: 12px;
+      word-wrap: normal;
+    }
+
+    .octicon {
+      display: inline-block;
+      overflow: visible !important;
+      vertical-align: text-bottom;
+      fill: currentColor;
+    }
+
+    input::-webkit-outer-spin-button,
+    input::-webkit-inner-spin-button {
+      margin: 0;
+      -webkit-appearance: none;
+      appearance: none;
+    }
+
+    .mr-2 {
+      margin-right: var(--base-size-8, 8px) !important;
+    }
+
+    & > *:first-child {
+      margin-top: 0 !important;
+    }
+
+    & > *:last-child {
+      margin-bottom: 0 !important;
+    }
+
+    a:not([href]) {
+      color: inherit;
+      text-decoration: none;
+    }
+
+    .absent {
+      color: light-dark(var(--negative-color), var(--red));
+    }
+
+    .anchor {
+      float: left;
+      padding-right: 4px;
+      margin-left: -20px;
+      line-height: 1;
+    }
+
+    p,
+    blockquote,
+    ul,
+    ol,
+    dl,
+    table,
+    pre,
+    details {
+      margin-top: 0;
+      margin-bottom: 16px;
+    }
+
+    blockquote > :first-child {
+      margin-top: 0;
+    }
+
+    blockquote > :last-child {
+      margin-bottom: 0;
+    }
+
+    h1:hover .anchor,
+    h2:hover .anchor,
+    h3:hover .anchor,
+    h4:hover .anchor,
+    h5:hover .anchor,
+    h6:hover .anchor {
+      text-decoration: none;
+    }
+
+    h1 tt,
+    h1 code,
+    h2 tt,
+    h2 code,
+    h3 tt,
+    h3 code,
+    h4 tt,
+    h4 code,
+    h5 tt,
+    h5 code,
+    h6 tt,
+    h6 code {
+      padding: 0 0.2em;
+      font-size: inherit;
+    }
+
+    summary h1,
+    summary h2,
+    summary h3,
+    summary h4,
+    summary h5,
+    summary h6 {
+      display: inline-block;
+    }
+
+    summary h1 .anchor,
+    summary h2 .anchor,
+    summary h3 .anchor,
+    summary h4 .anchor,
+    summary h5 .anchor,
+    summary h6 .anchor {
+      margin-left: -40px;
+    }
+
+    summary h1,
+    summary h2 {
+      padding-bottom: 0;
+      border-bottom: 0;
+    }
+
+    ul.no-list,
+    ol.no-list {
+      padding: 0;
+      list-style-type: none;
+    }
+
+    ol[type='a s'] {
+      list-style-type: lower-alpha;
+    }
+
+    ol[type='A s'] {
+      list-style-type: upper-alpha;
+    }
+
+    ol[type='i s'] {
+      list-style-type: lower-roman;
+    }
+
+    ol[type='I s'] {
+      list-style-type: upper-roman;
+    }
+
+    ol[type='1'] {
+      list-style-type: decimal;
+    }
+
+    div > ol:not([type]) {
+      list-style-type: decimal;
+    }
+
+    ul ul,
+    ul ol,
+    ol ol,
+    ol ul {
+      margin-top: 0;
+      margin-bottom: 0;
+    }
+
+    li > p {
+      margin-top: 16px;
+    }
+
+    li + li {
+      margin-top: 0.25em;
+    }
+
+    dl {
+      padding: 0;
+    }
+
+    dl dt {
+      padding: 0;
+      margin-top: 16px;
+      font-size: 1em;
+      font-style: italic;
+      font-weight: var(--font-weights-bold, 600);
+    }
+
+    dl dd {
+      padding: 0 16px;
+      margin-bottom: 16px;
+    }
+
+    table thead tr {
+      color: var(--mde-preview-table-head-text-color);
+      background-color: var(--mde-preview-table-head-background-color);
+    }
+
+    table th {
+      font-weight: var(--font-weights-bold, 600);
+    }
+
+    table th,
+    table td {
+      padding: 6px 13px;
+      border: 1px solid var(--mde-preview-table-border-color);
+    }
+
+    table td > :last-child {
+      margin-bottom: 0;
+    }
+
+    table tr {
+      background-color: var(--mde-preview-table-row-background-color);
+      border-top: 1px solid var(--mde-preview-table-row-border-color);
+    }
+
+    table tbody tr:nth-child(odd) {
+      background-color: var(--mde-preview-table-row-stripe-background-color);
+    }
+
+    table img {
+      background-color: transparent;
+    }
+
+    img[align='right'] {
+      padding-left: 20px;
+    }
+
+    img[align='left'] {
+      padding-right: 20px;
+    }
+
+    code {
+      color: var(--mde-preview-inline-code-text-color, currentColor);
+      border: var(--mde-preview-inline-code-border-width, 0) solid
+        var(--mde-preview-inline-code-border-color, transparent);
+      padding: var(--mde-preview-inline-code-padding);
+      margin: 0;
+      font-size: var(--mde-preview-inline-code-font-size);
+      white-space: break-spaces;
+      background-color: var(--mde-preview-inline-code-background-color);
+      border-radius: 6px;
+    }
+
+    a code {
+      color: inherit;
+    }
+
+    del code {
+      text-decoration: inherit;
+    }
+
+    samp {
+      font-size: 85%;
+    }
+
+    pre code {
+      font-size: 100%;
+    }
+
+    pre > code {
+      padding: 0;
+      margin: 0;
+      word-break: normal;
+      white-space: pre;
+      background: transparent;
+      border: 0;
+    }
+
+    .codeblock .codeblock-meta + pre {
+      border-top-left-radius: 0px;
+      border-top-right-radius: 0px;
+    }
+
+    .codeblock .codeblock-meta {
+      display: flex;
+      flex-direction: row;
+      align-items: center;
+      gap: 10px;
+      padding: 8px 16px;
+      font-size: var(--mde-preview-codeblock-meta-font-size);
+      line-height: 1.3;
+      color: var(--mde-preview-codeblock-meta-text-color);
+      background-color: var(
+        --mde-preview-codeblock-meta-background-color,
+        var(--mde-preview-codeblock-background-color)
+      );
+      border: 1px solid var(--mde-preview-codeblock-border-color);
+      border-radius: 6px 6px 0 0;
+      border-bottom: none;
+
+      .codeblock-meta-body {
+        flex: 1;
+
+        .codeblock-info {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 0.4em;
+
+          & :first-child:first-letter {
+            text-transform: capitalize;
+          }
+        }
+      }
+
+      .codeblock-meta-icon {
+        display: flex;
+        align-items: center;
+      }
+
+      .codeblock-title,
+      .codeblock-filename {
+        font-weight: 600;
+      }
+    }
+
+    .codeblock {
+      position: relative;
+      margin-bottom: 16px;
+    }
+
+    .codeblock pre {
+      margin-bottom: 0;
+      word-break: normal;
+    }
+
+    .codeblock pre,
+    pre {
+      position: relative;
+      padding: 16px;
+      overflow: auto;
+      font-size: 85%;
+      line-height: 1.45;
+      color: var(--mde-preview-codeblock-text-color);
+      background-color: var(--mde-preview-codeblock-background-color);
+      border: 1px solid var(--mde-preview-codeblock-border-color);
+      border-radius: 6px;
+    }
+
+    pre code,
+    pre tt {
+      display: inline;
+      max-width: auto;
+      padding: 0;
+      margin: 0;
+      overflow: visible;
+      line-height: inherit;
+      word-wrap: normal;
+      background-color: transparent;
+      border: 0;
+    }
+
+    .mde-preview-code {
+      display: flex;
+      flex-direction: row;
+      gap: 1em;
+
+      &.with-line-numbers code.mde-preview-code-body {
+        overflow: auto;
+        white-space: pre;
+      }
+
+      .mde-preview-code-line-number {
+        user-select: none;
+        text-align: right;
+      }
+    }
+
+    [data-footnote-ref]::before {
+      content: '[';
+    }
+
+    [data-footnote-ref]::after {
+      content: ']';
+    }
+
+    .footnotes {
+      font-size: 12px;
+      color: var(--mde-preview-footnote-text-color);
+      border-top: 1px solid var(--mde-preview-footnote-border-color);
+    }
+
+    .footnotes ol {
+      padding-left: 16px;
+    }
+
+    .footnotes ol ul {
+      display: inline-block;
+      padding-left: 16px;
+      margin-top: 16px;
+    }
+
+    .footnotes li {
+      position: relative;
+    }
+
+    .footnotes li:target::before {
+      position: absolute;
+      top: -8px;
+      right: -8px;
+      bottom: -8px;
+      left: -24px;
+      pointer-events: none;
+      content: '';
+      border: 2px solid var(--mde-preview-footnote-highlight-border-color);
+      border-radius: 6px;
+    }
+
+    .footnotes li:target {
+      color: var(--text-color);
+    }
+
+    .footnotes .data-footnote-backref g-emoji {
+      font-family: monospace;
+    }
+
+    g-emoji {
+      display: inline-block;
+      min-width: 1ch;
+      font-family: 'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol';
+      font-size: 1em;
+      font-style: normal !important;
+      font-weight: var(--font-weights-normal, 400);
+      line-height: 1;
+      vertical-align: -0.075em;
+    }
+
+    g-emoji img {
+      width: 1em;
+      height: 1em;
+    }
+
+    .task-list-item {
+      list-style-type: none;
+    }
+
+    ol > li.task-list-item {
+      list-style-type: inherit;
+
+      .task-list-item-checkbox {
+        margin: 0 0.2em 0 0;
+      }
+    }
+
+    .task-list-item label {
+      font-weight: var(--font-weights-normal, 400);
+    }
+
+    .task-list-item.enabled label {
+      cursor: pointer;
+    }
+
+    .task-list-item + .task-list-item {
+      margin-top: 4px;
+    }
+
+    .task-list-item .handle {
+      display: none;
+    }
+
+    .task-list-item-checkbox {
+      margin: 0 0.2em 0.25em -1.4em;
+      vertical-align: middle;
+    }
+
+    .task-list-item .task-list-item-checkbox {
+      margin-inline-end: 4px;
+    }
+
+    .task-list-item.checked {
+      text-decoration: line-through;
+      text-decoration-color: var(--mde-preview-task-list-checked-color);
+    }
+
+    .contains-task-list:dir(rtl) .task-list-item-checkbox {
+      margin: 0 -1.6em 0.25em 0.2em;
+    }
+
+    .contains-task-list {
+      position: relative;
+    }
+
+    .gfm-alert {
+      margin-bottom: 16px;
+      padding: 0.5rem 1rem;
+      border-left: 0.25em solid;
+
+      & > :last-child {
+        margin-bottom: 0;
+      }
+    }
+
+    p.gfm-alert-title {
+      margin-bottom: 16px;
+      font-weight: 600;
+
+      & > span.icon {
+        margin-right: 0.5em;
+        display: inline-flex;
+        overflow: visible !important;
+        vertical-align: text-bottom;
+      }
+    }
+
+    .gfm-alert-type-note {
+      > p.gfm-alert-title {
+        color: var(--gfm-alert-note);
+      }
+      border-color: var(--gfm-alert-note);
+    }
+    .gfm-alert-type-tip {
+      > p.gfm-alert-title {
+        color: var(--gfm-alert-tip);
+      }
+      border-color: var(--gfm-alert-tip);
+    }
+    .gfm-alert-type-important {
+      > p.gfm-alert-title {
+        color: var(--gfm-alert-important);
+      }
+      border-color: var(--gfm-alert-important);
+    }
+    .gfm-alert-type-warning {
+      > p.gfm-alert-title {
+        color: var(--gfm-alert-warning);
+      }
+      border-color: var(--gfm-alert-warning);
+    }
+    .gfm-alert-type-caution {
+      > p.gfm-alert-title {
+        color: var(--gfm-alert-caution);
+      }
+      border-color: var(--gfm-alert-caution);
+    }
+  }
+
+  @media print {
+    .mde-preview {
+      table {
+        overflow: hidden;
+        word-break: break-word;
+      }
+      pre > code {
+        word-wrap: break-word;
+        white-space: pre-wrap;
+      }
+    }
+  }
+
+
+/* ── Copy-to-clipboard button (app bundle + semantic-ui base) ───────────── */
+.mde-preview pre .ui.copy-to-clipboard.button {
+  opacity: 0;
+  z-index: 10;
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  transform: scale(0.9);
+  transition: opacity 0.2s ease-in-out, transform 0.2s ease-in-out;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  margin: 0;
+  padding: 0;
+  cursor: pointer;
+  color: var(--muted-text-color);
+  background-color: var(--mde-preview-codeblock-background-color);
+  border: 1px solid var(--mde-preview-codeblock-border-color);
+  border-radius: 6px;
+}
+.mde-preview pre .ui.copy-to-clipboard.button > svg {
+  margin: 0;
+  transition: transform 0.2s ease-in-out;
+}
+.mde-preview pre .ui.copy-to-clipboard.button > svg[name='check'] {
+  color: var(--success-color);
+  display: none;
+}
+.mde-preview pre .ui.copy-to-clipboard.button.copied > svg[name='copy'] {
+  display: none;
+}
+.mde-preview pre .ui.copy-to-clipboard.button.copied > svg[name='check'] {
+  display: block;
+}
+.mde-preview pre:hover .ui.copy-to-clipboard.button {
+  opacity: 1;
+  transform: scale(1);
+}
+.mde-preview pre .ui.copy-to-clipboard.button:hover {
+  color: var(--text-color);
+}
+
+/* ── Codeblock meta icon ────────────────────────────────────────────────── */
+.mde-preview .codeblock-meta-icon svg {
+  display: block;
+  width: 16px;
+  height: 16px;
+  color: var(--muted-text-color);
+}
+
+/* ── Mermaid (ported from @inkdropapp/mermaid/styles/mermaid.css) ────────── */
+.mermaid-diagram {
+  position: relative;
+}
+.mermaid-diagram .mermaid-diagram-content {
+  overflow: hidden;
+  transform-origin: 0 0;
+}
+.mermaid-dot-grid {
+  background-image: radial-gradient(
+    circle,
+    light-dark(var(--transparent-black), var(--transparent-white)) 1px,
+    transparent 1px
+  );
+  background-size: 16px 16px;
+}
+.mermaid-toolbar {
+  position: absolute;
+  right: 0.2em;
+  bottom: 0.2em;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 4px;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.15s ease-in-out;
+  user-select: none;
+}
+.mermaid-toolbar .mermaid-toolbar-controls {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 4px;
+  border-radius: 6px;
+  background: var(--editor-floating-actions-background);
+}
+.mermaid-toolbar .mermaid-toolbar-controls button {
+  display: flex;
+  padding: 2px;
+  border: none;
+  background: none;
+  cursor: pointer;
+}
+.mermaid-toolbar .mermaid-toolbar-controls button svg {
+  color: var(--muted-text-color);
+}
+.mermaid-toolbar .mermaid-toolbar-controls button:hover svg {
+  color: var(--text-color);
+}
+.mermaid-diagram:hover .mermaid-toolbar,
+.mermaid-diagram:fullscreen .mermaid-toolbar {
+  opacity: 1;
+  pointer-events: auto;
+}
+.mermaid-diagram:fullscreen {
+  width: 100%;
+  height: 100%;
+  background: var(--bg);
+}
+.mermaid-diagram:fullscreen .mermaid-diagram-content {
+  width: 100%;
+  height: 100%;
+  user-select: text;
+}
+.mermaid-diagram:fullscreen .mermaid-diagram-content > div {
+  width: 100%;
+  height: 100%;
+}
+.mermaid-diagram:fullscreen .mermaid-diagram-content svg {
+  max-width: none !important;
+  width: 100%;
+  height: 100%;
+}
+
+/* ── KaTeX / math error fallbacks ───────────────────────────────────────── */
+.mde-preview .ui.error.message,
+.mde-preview .mde-error-message {
+  display: inline-block;
+  padding: 0.4em 0.8em;
+  color: var(--negative-color);
+  background-color: light-dark(hsl(var(--hsl-red-500) / 10%), hsl(var(--hsl-red-200) / 12%));
+  border-radius: 6px;
+  font-size: 90%;
+}

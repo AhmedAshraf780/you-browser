@@ -179,6 +179,21 @@ const terminal = {
 
 contextBridge.exposeInMainWorld('terminal', terminal)
 
+/** Families installed on the machine, for the terminal + card font pickers. */
+export interface FontChoices {
+  nerd: string[]
+  mono: string[]
+  /** Proportional families, alphabetically (Blinko card typeface). */
+  sans: string[]
+}
+
+const fonts = {
+  /** Nerd Fonts first (best for the terminal), then the other monospace families. */
+  list: (): Promise<FontChoices> => ipcRenderer.invoke('fonts:list')
+}
+
+contextBridge.exposeInMainWorld('fonts', fonts)
+
 declare global {
   interface Window {
     vault: typeof vault
@@ -186,6 +201,7 @@ declare global {
     shortcuts: typeof shortcuts
     theme: typeof themeApi
     terminal: typeof terminal
+    fonts: typeof fonts
     study: typeof studyApi
     wallpaper: typeof wallpaperApi
   }

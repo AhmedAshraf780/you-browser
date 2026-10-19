@@ -9,6 +9,7 @@ import {
   Languages,
   SquareKanban,
   SquareTerminal,
+  StickyNote,
   type LucideIcon
 } from 'lucide-react'
 import type { TabType } from '../tabs'
@@ -20,6 +21,7 @@ const MAP: Record<TabType, LucideIcon> = {
   pdf: FileType,
   home: House,
   kanban: SquareKanban,
+  blinko: StickyNote,
   calendar: CalendarDays,
   terminal: SquareTerminal,
   vocab: Languages

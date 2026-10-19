@@ -15,8 +15,12 @@
   font-display: swap;
 }
 html, body, #root { height: 100%; margin: 0; }
+/* The app's UI face. Blinko cards default to it too, so a card reads the same
+   whether it is being displayed or edited; Settings can point them elsewhere
+   via --blp-font. */
+:root { --ui-font: 'Inter', system-ui, sans-serif; }
 body {
-  font-family: 'Inter', system-ui, sans-serif;
+  font-family: var(--ui-font);
   background: var(--bg);
   color: var(--text);
   font-size: 13px;
@@ -1247,109 +1251,6 @@ webview { height: 100%; }
   font-weight: 600;
 }
 
-/* Preview pane */
-.mde-preview-pane {
-  flex: 1;
-  min-width: 0;
-  overflow-y: auto;
-  background: var(--bg-soft);
-}
-
-.md-preview {
-  padding: 36px 48px;
-  max-width: 720px;
-  margin: 0 auto;
-  font-size: 15px;
-  line-height: 1.85;
-  color: var(--text);
-}
-
-.md-preview h1 {
-  font-size: 2em;
-  font-weight: 700;
-  letter-spacing: -0.03em;
-  line-height: 1.2;
-  margin: 0 0 0.5em;
-  color: var(--text);
-  border-bottom: 2px solid var(--border);
-  padding-bottom: 0.4em;
-}
-.md-preview h2 {
-  font-size: 1.45em;
-  font-weight: 600;
-  letter-spacing: -0.02em;
-  margin: 1.6em 0 0.5em;
-  color: var(--text);
-  border-bottom: 1px solid var(--border-soft);
-  padding-bottom: 0.3em;
-}
-.md-preview h3 {
-  font-size: 1.2em;
-  font-weight: 600;
-  margin: 1.4em 0 0.4em;
-  color: var(--text);
-}
-.md-preview h4, .md-preview h5, .md-preview h6 {
-  font-size: 1em;
-  font-weight: 600;
-  margin: 1.2em 0 0.3em;
-  color: var(--text-dim);
-}
-.md-preview p { margin: 0 0 1.1em; }
-.md-preview a { color: var(--accent); text-decoration: underline; text-underline-offset: 3px; text-decoration-thickness: 1px; }
-.md-preview a:hover { opacity: 0.8; }
-
-.md-preview pre {
-  background: var(--bg-raise);
-  padding: 18px 20px;
-  overflow: auto;
-  border-radius: var(--radius);
-  margin: 1.2em 0;
-  border: 1px solid var(--border);
-}
-.md-preview code {
-  font-family: 'JetBrains Mono', ui-monospace, monospace;
-  font-size: 0.87em;
-  letter-spacing: 0;
-}
-.md-preview p code, .md-preview li code {
-  background: var(--bg-raise);
-  border: 1px solid var(--border);
-  border-radius: 4px;
-  padding: 1px 5px;
-  font-size: 0.85em;
-}
-.md-preview blockquote {
-  border-left: 3px solid var(--accent);
-  margin: 1.2em 0;
-  padding: 4px 16px;
-  background: var(--accent-soft);
-  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
-  color: var(--text-dim);
-}
-.md-preview blockquote p { margin: 0; }
-.md-preview table { border-collapse: collapse; width: 100%; margin: 1.2em 0; }
-.md-preview th {
-  background: var(--bg-raise);
-  font-weight: 600;
-  text-align: left;
-}
-.md-preview th, .md-preview td {
-  border: 1px solid var(--border);
-  padding: 8px 12px;
-  font-size: 0.93em;
-}
-.md-preview tr:nth-child(even) td { background: var(--accent-soft); }
-.md-preview ul, .md-preview ol { padding-left: 1.6em; margin: 0 0 1.1em; }
-.md-preview li { margin-bottom: 0.3em; }
-.md-preview hr { border: none; border-top: 1px solid var(--border); margin: 2em 0; }
-
-/* Preview-only mode (full width) */
-.mde-preview-pane.full {
-  background: var(--bg);
-}
-.mde-preview-pane.full .md-preview { padding: 48px 64px; }
-
 /* ═══════════════════════════════════════════════════════════════════════════
    HOME DASHBOARD
    ═══════════════════════════════════════════════════════════════════════════ */
@@ -1742,6 +1643,49 @@ webview { height: 100%; }
 }
 .set-input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
 .set-input::placeholder { color: var(--text-dim); }
+/* chevron drawn from the theme's own text colour, so it follows every palette */
+.set-select {
+  appearance: none;
+  padding-right: 26px;
+  cursor: pointer;
+  background-image: linear-gradient(45deg, transparent 50%, currentColor 50%),
+    linear-gradient(135deg, currentColor 50%, transparent 50%);
+  background-position: calc(100% - 15px) center, calc(100% - 10px) center;
+  background-size: 5px 5px, 5px 5px;
+  background-repeat: no-repeat;
+}
+/* live sample in the chosen terminal font (glyphs included, when it has them) */
+.term-preview {
+  margin: 8px 0;
+  padding: 8px 10px;
+  background: var(--bg-raise);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  font-size: 12.5px;
+  line-height: 1.35;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+}
+/* Blinko card font preview — reads like a small card, not a terminal line. */
+.blp-font-preview {
+  margin: 8px 0;
+  padding: 9px 11px;
+  background: var(--bg-soft);
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--accent);
+  border-radius: 10px;
+  font-size: 13.5px;
+  line-height: 1.55;
+  color: var(--text);
+}
+.blp-font-preview code {
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 12px;
+  background: var(--bg-raise);
+  padding: 1px 4px;
+  border-radius: 4px;
+}
 .set-row { display: flex; align-items: center; justify-content: space-between; font-size: 13px; padding: 6px 0; }
 .set-row kbd {
   background: var(--bg-raise);
@@ -1993,13 +1937,6 @@ webview { height: 100%; }
 .mds-inline-code { color: #ff6b6b; background: var(--bg-raise); border-radius: 3px; padding: 0 2px; }
 .mds-link        { color: var(--accent); text-decoration: underline; text-underline-offset: 2px; }
 .mds-bullet      { color: var(--accent); font-weight: 700; }
-
-/* ── Themed preview headings ── */
-.md-preview h1 { color: var(--accent); }
-.md-preview h2 { color: var(--accent); opacity: 0.88; }
-.md-preview h3 { color: var(--accent); opacity: 0.76; }
-.md-preview h4 { color: var(--accent); opacity: 0.64; }
-.md-preview h5, .md-preview h6 { color: var(--accent); opacity: 0.52; }
 
 /* ═══════════════════════════════════════════════════════════════════════════
    HOME DASHBOARD — NEW WIDGETS
@@ -2647,3 +2584,474 @@ webview { height: 100%; }
 }
 .study-link:hover { color: var(--accent); }
 .study-note { margin-top: 8px; font-size: 10.5px; color: var(--text-muted); }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   BLINKO — card-stream workspace
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+.blp {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg);
+  /* Card typeface: the UI font unless Settings picks another family. */
+  --blp-font: var(--ui-font);
+}
+/* While a card is being dragged the whole window is a drop surface. */
+body.blp-dragging { user-select: none; cursor: grabbing; }
+body.blp-dragging * { cursor: grabbing !important; }
+
+/* ─── Header + composer ──────────────────────────────────────────────────── */
+.blp-top {
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 18px 22px 14px;
+  border-bottom: 1px solid var(--border);
+}
+.blp-head { display: flex; align-items: baseline; gap: 10px; }
+.blp-mark { font-size: 20px; font-weight: 700; letter-spacing: -0.4px; }
+.blp-count { font-size: 11.5px; color: var(--text-dim); }
+.blp-save { margin-left: auto; font-size: 10.5px; letter-spacing: 0.4px; color: var(--text-muted); }
+.blp-save-saved { color: var(--text-dim); }
+.blp-save-error { color: #ff6b6b; }
+
+.blp-filters { display: flex; flex-wrap: wrap; gap: 6px; }
+.blp-chip {
+  font: inherit;
+  font-size: 11.5px;
+  color: var(--text-dim);
+  background: var(--bg-raise);
+  border: 1px solid transparent;
+  border-radius: 99px;
+  padding: 3px 10px;
+  cursor: pointer;
+  transition: color 0.14s, background 0.14s, border-color 0.14s;
+}
+.blp-chip:hover { color: var(--text); }
+.blp-chip.on { color: var(--accent); background: var(--accent-soft); border-color: var(--accent-glow); }
+
+.blp-composer {
+  background: var(--bg-soft);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 10px 12px 8px;
+  transition: border-color 0.14s, box-shadow 0.14s;
+}
+.blp-composer:focus-within { border-color: var(--accent-glow); box-shadow: var(--shadow); }
+
+.blp-composer-bar { display: flex; align-items: center; gap: 10px; margin-top: 8px; }
+.blp-hint { margin-left: auto; font-size: 10.5px; color: var(--text-muted); }
+
+.blp-swatches { display: flex; align-items: center; gap: 5px; }
+.blp-swatch {
+  width: 15px;
+  height: 15px;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 50%;
+  cursor: pointer;
+  transition: transform 0.12s, box-shadow 0.12s;
+}
+.blp-swatch:hover { transform: scale(1.15); }
+.blp-swatch.on { box-shadow: 0 0 0 2px var(--bg-soft), 0 0 0 3px var(--accent); }
+.blp-swatch-none { background: var(--bg-raise); position: relative; overflow: hidden; }
+.blp-swatch-none::after {
+  content: '';
+  position: absolute;
+  left: -3px;
+  right: -3px;
+  top: 50%;
+  height: 1.5px;
+  background: var(--text-dim);
+  transform: rotate(45deg);
+}
+
+.blp-send {
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--bg);
+  background: var(--accent);
+  border: none;
+  border-radius: 99px;
+  padding: 5px 16px;
+  cursor: pointer;
+  transition: opacity 0.14s, transform 0.12s;
+}
+.blp-send:hover:not(:disabled) { transform: translateY(-1px); }
+.blp-send:disabled { opacity: 0.4; cursor: default; }
+
+/* ─── Stream + masonry ───────────────────────────────────────────────────── */
+.blp-stream { flex: 1; min-height: 0; overflow-y: auto; padding: 22px 24px 48px; }
+/* Two Blinko-style columns, centred; content grows taller for a card feel. */
+.blp-masonry {
+  columns: 2;
+  column-gap: 18px;
+  max-width: 1080px;
+  margin: 0 auto;
+}
+@media (max-width: 760px) {
+  .blp-masonry { columns: 1; }
+}
+.blp-empty { color: var(--text-dim); font-size: 13px; padding: 48px 4px; text-align: center; }
+
+/* Blinko card: flat surface, roomy padding, and the app's hover nudge. */
+.blp-card {
+  break-inside: avoid;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-height: 150px;
+  margin: 0 0 18px;
+  padding: 13px 16px 10px;
+  position: relative;
+  background: var(--bg-soft);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  transition: transform 0.16s ease, box-shadow 0.16s ease, border-color 0.16s ease;
+}
+.blp-card:hover { transform: translateY(4px); box-shadow: var(--shadow); }
+.blp-card-accent { position: absolute; top: 0; bottom: 0; left: 0; width: 3px; border-radius: 14px 0 0 14px; }
+
+/* ─── Pin-to-top + drag-reorder affordances ──────────────────────────────── */
+/* Pinned cards carry a permanent marker: the reason they sit in the top band
+   shouldn't only be visible while hovering. */
+.blp-pin-badge {
+  display: inline-flex;
+  align-items: center;
+  color: var(--accent);
+  opacity: 0.85;
+}
+.blp-card.is-pinned { border-color: var(--border-soft, var(--border)); }
+.blp-grip { cursor: grab; touch-action: none; }
+.blp-grip:active { cursor: grabbing; }
+
+/* The card left behind while its copy follows the pointer. */
+.blp-card.is-dragging { opacity: 0.32; }
+/* Where it will land — a line above or below the card under the pointer. */
+.blp-card.drop-before::before,
+.blp-card.drop-after::after {
+  content: '';
+  position: absolute;
+  left: 10px;
+  right: 10px;
+  height: 2px;
+  border-radius: 2px;
+  background: var(--accent);
+  box-shadow: 0 0 8px var(--accent-glow);
+  pointer-events: none;
+}
+.blp-card.drop-before::before { top: -10px; }
+.blp-card.drop-after::after { bottom: -10px; }
+
+/* The floating copy of the dragged card. */
+.blp-drag-ghost {
+  position: fixed;
+  left: 0;
+  top: 0;
+  z-index: 80;
+  pointer-events: none;
+  opacity: 0.94;
+  rotate: 1.2deg;
+  box-shadow: var(--shadow-lg);
+  border-radius: 14px;
+}
+.blp-drag-ghost > .blp-card {
+  margin: 0 !important;
+  transform: none !important;
+  box-shadow: none !important;
+}
+.blp-drag-ghost .blp-tools { opacity: 1; transform: none; }
+
+.blp-card-head { display: flex; align-items: center; gap: 8px; min-height: 18px; }
+.blp-time { font-size: 11px; color: var(--text-dim); }
+
+.blp-tools {
+  margin-left: auto;
+  display: flex;
+  gap: 3px;
+  opacity: 0;
+  transform: translateX(4px);
+  transition: opacity 0.14s, transform 0.14s;
+}
+.blp-card:hover .blp-tools,
+.blp-card:focus-within .blp-tools { opacity: 1; transform: none; }
+
+.blp-card-foot { display: flex; align-items: center; margin-top: auto; padding-top: 8px; }
+.blp-cat { display: inline-flex; align-items: center; gap: 4px; font-size: 11px; font-weight: 700; color: var(--text-dim); }
+.blp-cat svg { color: #f0b429; }
+
+.blp-icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  color: var(--text-dim);
+  background: var(--bg-raise);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  cursor: pointer;
+  transition: color 0.14s, background 0.14s;
+}
+.blp-icon-btn:hover { color: var(--text); background: var(--accent-soft); }
+.blp-icon-btn.on { color: var(--accent); background: var(--accent-soft); }
+.blp-del:hover { color: #ff6b6b; background: rgba(255, 107, 107, 0.12); }
+
+.blp-edit { display: flex; flex-direction: column; gap: 8px; flex: 1; }
+.blp-edit .blp-composer-bar { margin-top: 0; }
+
+/* Inkdrop preview typography, scaled to card size. The family follows the
+   Settings choice, matching the editor byte for byte. */
+.blp-md.mde-preview {
+  flex: 1;
+  font-family: var(--blp-font);
+  font-size: 14.5px;
+  line-height: 1.6;
+  padding: 0;
+  margin: 0;
+  max-width: none;
+  display: block;
+}
+.blp-md.mde-preview > :first-child { margin-top: 0; }
+.blp-md.mde-preview > :last-child { margin-bottom: 0; }
+
+.blp-tags { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 10px; }
+.blp-tag {
+  font: inherit;
+  font-size: 11px;
+  color: var(--accent);
+  background: var(--accent-soft);
+  border: none;
+  border-radius: 6px;
+  padding: 1px 7px;
+  cursor: pointer;
+}
+.blp-tag:hover { background: var(--accent-glow); }
+
+/* Rich media stored in the vault (card images + voice notes). */
+.blp-md img {
+  max-width: 100%;
+  max-height: 320px;
+  object-fit: contain;
+  border-radius: 10px;
+  cursor: zoom-in;
+}
+.blp-md audio {
+  width: 100%;
+  margin: 6px 0;
+  height: 34px;
+}
+
+.blp-error {
+  font-size: 12px;
+  color: #ff6b6b;
+  background: rgba(255, 107, 107, 0.1);
+  border: 1px solid rgba(255, 107, 107, 0.3);
+  border-radius: var(--radius-sm);
+  padding: 6px 10px;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   BLINKO EDITOR — Vditor in instant-render mode, themed to the app
+   (port of the app's vditor.css using this shell's design tokens)
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+.blp-editor { display: flex; flex-direction: column; gap: 6px; }
+.blp-editor-host { min-width: 0; }
+
+.blp-editor .vditor {
+  border: none;
+  background: transparent;
+}
+/* Vditor injects inline `padding-left` on the toolbar and `padding: 10px Npx`
+   on the editor body to centre a max-width column; Blinko clamps both back
+   with !important so cards stay flush-left and compact. */
+.blp-editor .vditor-toolbar {
+  padding: 0 0 4px !important;
+  margin: 0;
+  min-height: 26px;
+  background: transparent;
+  border: none;
+  overflow: visible;
+}
+/* Blinko's `.vditor-content { min-height: 20px }` — keeps a card editor short. */
+.blp-editor .vditor-content { min-height: 20px; }
+.blp-editor .vditor-toolbar__item .vditor-tooltipped {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border-radius: 7px;
+  color: var(--text-dim);
+  transition: color 0.14s, background 0.14s;
+}
+.blp-editor .vditor-toolbar__item .vditor-tooltipped:hover {
+  color: var(--text);
+  background: var(--accent-soft);
+}
+.blp-editor .vditor-toolbar__item svg {
+  fill: currentColor;
+  stroke: currentColor;
+  width: 17px;
+  height: 17px;
+}
+.blp-editor .vditor-toolbar__divider { border-left-color: var(--border); }
+
+.blp-editor .vditor-reset,
+.blp-editor .vditor-ir pre.vditor-reset,
+.blp-editor .vditor-sv,
+.blp-editor .vditor-wysiwyg pre.vditor-reset {
+  background: transparent;
+  color: var(--text);
+  padding: 2px 0 !important;
+  /* Same face as the rendered card — Vditor's own default is Helvetica Neue. */
+  font-family: var(--blp-font);
+  font-size: 14px;
+  line-height: 1.6;
+}
+.blp-editor .vditor-ir pre.vditor-reset:focus { background: transparent; }
+.blp-editor .vditor-ir pre.vditor-reset:empty::before { color: var(--text-muted); }
+.blp-editor .vditor-reset:focus { background: transparent !important; }
+
+.blp-editor a { color: var(--accent); font-weight: 700; }
+.blp-editor .vditor-reset ul,
+.blp-editor .vditor-reset ol { padding-left: 1.2em; }
+.blp-editor .vditor-reset p { margin-bottom: 8px; }
+.blp-editor .vditor-reset h1,
+.blp-editor .vditor-reset h2,
+.blp-editor .vditor-reset h3,
+.blp-editor .vditor-reset h4,
+.blp-editor .vditor-reset h5,
+.blp-editor .vditor-reset h6 { margin-top: 12px; margin-bottom: 8px; }
+.blp-editor .vditor-reset code:not(.hljs) {
+  background: var(--bg-raise);
+  color: var(--text);
+  padding: 1px 5px;
+  border-radius: 5px;
+}
+.blp-editor .vditor-reset pre > code { border-radius: 8px; }
+.blp-editor .vditor-reset blockquote {
+  border-left: 3px solid var(--accent);
+  color: var(--text-dim);
+  padding-left: 10px;
+}
+.blp-editor .vditor-reset table tr { background: var(--bg-soft); border-top: 1px solid var(--border); }
+.blp-editor .vditor-reset table td,
+.blp-editor .vditor-reset table th { border: 1px solid var(--border); }
+.blp-editor .vditor-reset img { max-height: 260px; border-radius: 10px; }
+.blp-editor .vditor-reset audio { width: 100%; }
+
+/* IR markers (`**`, `#`) and the collapsed preview. */
+.blp-editor .vditor-ir__marker { color: var(--text-muted); }
+.blp-editor .vditor-ir__node--expand .vditor-ir__preview { display: none; }
+
+/* Floating pickers: emoji, headings, hints. */
+.blp-editor .vditor-panel,
+.blp-editor .vditor-hint,
+.blp-editor .vditor-tip__content {
+  background: var(--bg-raise);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  box-shadow: var(--shadow);
+}
+.blp-editor .vditor-panel--arrow::before { display: none; }
+.blp-editor .vditor-hint button { color: var(--text); border-radius: 7px; }
+.blp-editor .vditor-hint button:hover,
+.blp-editor .vditor-hint--current { background: var(--accent-soft) !important; color: var(--text) !important; }
+.blp-editor .blp-tag-hint { color: var(--accent); font-weight: 600; }
+
+/* File/voice row under the toolbar. */
+.blp-editor-tools { display: flex; align-items: center; gap: 6px; }
+.blp-spin { color: var(--text-dim); animation: blp-rotate 0.9s linear infinite; }
+@keyframes blp-rotate { to { transform: rotate(360deg); } }
+
+/* Click-to-zoom image viewer (Blinko's image attachment preview). */
+.blp-lightbox {
+  position: fixed;
+  inset: 0;
+  z-index: 70;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 40px;
+  background: rgba(0, 0, 0, 0.82);
+  cursor: zoom-out;
+  animation: fade-in 0.14s ease;
+}
+.blp-lightbox img {
+  max-width: 100%;
+  max-height: 100%;
+  border-radius: 12px;
+  box-shadow: var(--shadow-lg);
+}
+
+/* ─── Voice recorder ─────────────────────────────────────────────────────── */
+.blp-rec-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.55);
+  backdrop-filter: blur(2px);
+  animation: fade-in 0.14s ease;
+}
+.blp-rec {
+  width: min(360px, 90vw);
+  padding: 16px;
+  background: #17181c;
+  color: #f2f2f2;
+  border-radius: 16px;
+  box-shadow: var(--shadow-lg);
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.blp-rec-head { display: flex; align-items: center; gap: 8px; font-weight: 700; letter-spacing: 0.06em; font-size: 13px; }
+.blp-rec-dot { width: 8px; height: 8px; border-radius: 50%; background: #ef4444; animation: blp-rec-pulse 1.1s ease-in-out infinite; }
+@keyframes blp-rec-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.25; } }
+.blp-rec-bars { display: flex; align-items: flex-end; justify-content: center; gap: 2px; height: 44px; }
+.blp-rec-bars span {
+  width: 4px;
+  min-height: 3px;
+  border-radius: 2px;
+  background: #22c55e;
+  transition: height 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+.blp-rec-time { text-align: center; font-size: 42px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.blp-rec-actions { display: flex; align-items: center; justify-content: center; gap: 18px; min-height: 60px; }
+.blp-rec-stop,
+.blp-rec-keep,
+.blp-rec-discard {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 58px;
+  height: 58px;
+  border: none;
+  border-radius: 50%;
+  cursor: pointer;
+  color: #fff;
+  transition: transform 0.12s ease, filter 0.12s ease;
+}
+.blp-rec-stop:active,
+.blp-rec-keep:active,
+.blp-rec-discard:active { transform: scale(0.94); }
+.blp-rec-stop { background: #22c55e; }
+.blp-rec-stop > span { width: 20px; height: 20px; border-radius: 4px; background: #fff; }
+.blp-rec-keep { background: #22c55e; }
+.blp-rec-discard { background: #2a2c33; }
+.blp-rec-discard svg { color: #ef4444; }
+.blp-rec-denied { display: flex; flex-direction: column; align-items: center; gap: 10px; text-align: center; padding: 12px 4px; }
+.blp-rec-denied h3 { margin: 0; font-size: 16px; }
+.blp-rec-denied p { margin: 0; font-size: 13px; color: #b9bcc4; }
+.blp-rec-denied .blp-rec-discard { width: auto; height: auto; padding: 8px 18px; border-radius: 99px; font-size: 13px; }

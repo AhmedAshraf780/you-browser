@@ -1,14 +1,16 @@
 import { useMemo, useState } from 'react'
 import { freshBoard, useStore } from '../store'
+import { serializeBlinkoFile } from '../blinko'
 import { typeForPath } from '../tabs'
 import { TreeNode, baseName, joinPath, parentDir } from '../vault'
 
-type CreateKind = 'md' | 'excalidraw' | 'kanban' | 'vocab' | 'folder'
+type CreateKind = 'md' | 'excalidraw' | 'kanban' | 'blinko' | 'vocab' | 'folder'
 
 const KIND_LABEL: Record<CreateKind, string> = {
   md: 'note.md',
   excalidraw: 'drawing.excalidraw',
   kanban: 'board.kanban',
+  blinko: 'cards.blinko',
   vocab: 'deck.vocab',
   folder: 'folder'
 }
@@ -107,6 +109,9 @@ export function FileExplorer(): JSX.Element {
         } else if (c.kind === 'kanban') {
           if (!/\.kanban$/i.test(target)) target += '.kanban'
           await window.vault.write(target, JSON.stringify({ version: 1, columns: freshBoard() }, null, 2))
+        } else if (c.kind === 'blinko') {
+          if (!/\.blinko$/i.test(target)) target += '.blinko'
+          await window.vault.write(target, serializeBlinkoFile([]))
         } else if (c.kind === 'vocab') {
           if (!/\.vocab$/i.test(target)) target += '.vocab'
           await window.vault.write(target, JSON.stringify({ version: 1, cards: [] }, null, 2))
@@ -193,20 +198,23 @@ export function FileExplorer(): JSX.Element {
         onChange={(e) => setQuery(e.target.value)}
         onKeyDown={(e) => e.key === 'Escape' && setQuery('')}
       />
-      <div style={{ display: 'flex', gap: 4, marginBottom: 6, padding: '0 2px' }}>
-        <button className="btn" style={{ flex: 1, background: 'var(--bg-raise)' }} onClick={() => startCreate('', 'md')} title="New note in vault root">
+      <div style={{ display: 'flex', gap: 4, marginBottom: 6, padding: '0 2px', flexWrap: 'wrap' }}>
+        <button className="btn" style={{ flex: 1, minWidth: 60, background: 'var(--bg-raise)' }} onClick={() => startCreate('', 'md')} title="New note in vault root">
           + Note
         </button>
-        <button className="btn" style={{ flex: 1, background: 'var(--bg-raise)' }} onClick={() => startCreate('', 'excalidraw')} title="New drawing in vault root">
+        <button className="btn" style={{ flex: 1, minWidth: 60, background: 'var(--bg-raise)' }} onClick={() => startCreate('', 'excalidraw')} title="New drawing in vault root">
           + Draw
         </button>
-        <button className="btn" style={{ flex: 1, background: 'var(--bg-raise)' }} onClick={() => startCreate('', 'kanban')} title="New board in vault root">
+        <button className="btn" style={{ flex: 1, minWidth: 60, background: 'var(--bg-raise)' }} onClick={() => startCreate('', 'kanban')} title="New board in vault root">
           + Board
         </button>
-        <button className="btn" style={{ flex: 1, background: 'var(--bg-raise)' }} onClick={() => startCreate('', 'vocab')} title="New vocabulary deck in vault root">
+        <button className="btn" style={{ flex: 1, minWidth: 60, background: 'var(--bg-raise)' }} onClick={() => startCreate('', 'blinko')} title="New Blinko workspace in vault root">
+          + Blinko
+        </button>
+        <button className="btn" style={{ flex: 1, minWidth: 60, background: 'var(--bg-raise)' }} onClick={() => startCreate('', 'vocab')} title="New vocabulary deck in vault root">
           + Deck
         </button>
-        <button className="btn" style={{ flex: 1, background: 'var(--bg-raise)' }} onClick={() => startCreate('', 'folder')} title="New folder in vault root">
+        <button className="btn" style={{ flex: 1, minWidth: 60, background: 'var(--bg-raise)' }} onClick={() => startCreate('', 'folder')} title="New folder in vault root">
           + Folder
         </button>
       </div>
@@ -291,6 +299,7 @@ function NodeRow(props: RowProps): JSX.Element {
     web: '#4da3ff',
     markdown: '#7bd88f',
     excalidraw: '#c792ea',
+    blinko: '#f0a45e',
     pdf: '#ff6b6b',
     folder: '#888'
   }
@@ -470,6 +479,7 @@ function ContextMenu({
     { label: 'New note', run: () => onCreate(parent, 'md') },
     { label: 'New drawing', run: () => onCreate(parent, 'excalidraw') },
     { label: 'New board', run: () => onCreate(parent, 'kanban') },
+    { label: 'New Blinko', run: () => onCreate(parent, 'blinko') },
     { label: 'New deck', run: () => onCreate(parent, 'vocab') },
     { label: 'New folder', run: () => onCreate(parent, 'folder') }
   ]

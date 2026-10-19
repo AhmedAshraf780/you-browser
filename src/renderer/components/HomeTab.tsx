@@ -664,7 +664,7 @@ export function HomeTab(): JSX.Element {
     return () => clearTimeout(t)
   }, [scratch])
 
-  const notes     = useMemo(() => recentVaultFiles(tree, ['.md', '.mf', '.excalidraw', '.kanban'], 6), [tree])
+  const notes     = useMemo(() => recentVaultFiles(tree, ['.md', '.mf', '.excalidraw', '.kanban', '.blinko'], 6), [tree])
   const openCount = todos.filter((t) => !t.done).length
   const doneCount = todos.length - openCount
 
