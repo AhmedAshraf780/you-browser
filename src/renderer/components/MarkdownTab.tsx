@@ -5,7 +5,7 @@ import { createTheme } from '@uiw/codemirror-themes'
 import { markdown } from '@codemirror/lang-markdown'
 import { languages } from '@codemirror/language-data'
 import { syntaxHighlighting } from '@codemirror/language'
-import { keymap } from '@codemirror/view'
+import { EditorView, keymap } from '@codemirror/view'
 import { searchKeymap } from '@codemirror/search'
 import { vim } from '@replit/codemirror-vim'
 import { tags as t } from '@lezer/highlight'
@@ -288,6 +288,7 @@ export function MarkdownTab({ tab }: { tab: Tab }): JSX.Element {
                 markdown({ codeLanguages: languages }),
                 syntaxHighlighting(inkdropHighlightStyle),
                 keymap.of(searchKeymap),
+                EditorView.lineWrapping,
                 ...(vimMode ? [vim()] : [])
               ]}
               basicSetup={{ lineNumbers: false, foldGutter: false }}
